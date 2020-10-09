@@ -1,24 +1,36 @@
-#include "lexic.h"
-#include <iostream>
-#include <fstream>
-using namespace std;
+#include "main.h"
+
+// This function checks if the file has extension .ms
+bool check_extension(char *filename_char){
+  std::string filename(filename_char);
+  if(!filename.compare(filename.length()-3, 3, ".ms"))
+    return true;
+  return false;
+}
 
 int main(int argc,char **argv)
 {
-  fstream file(argv[1], fstream::in);
-  string text;
-  //Parser parser;
+  std::fstream file(argv[1], std::fstream::in);
+  std::string text;
+  Parser parser;
 
-  if(file.good()){
-      //Pegar conteudo do arquivo
-      getline( file, text, '\0');
-      file.close();
-      const char * textc = text.c_str();
-      cout << text << endl;
-      //parser.parse(textc);
+  // If occurred a error
+  if(file.fail()){
+    printf("[ERROR] An error has occurred\n");
   }
+  // If the extension is wrong
+  else if(!check_extension(argv[1])){
+    printf("[ERROR] The extension must be .ms\n");
+  }
+  // If is everything alright, we parse the file
+  else if(file.good()){
+    std::getline( file, text, '\0');
+    file.close();
+    parser.parse(text.c_str());
+  }
+  // If it is not alright
   else
-    printf("This file does not exist.\n");
+    printf("[ERROR] An error has occurred\n");
 
   return 0;
 }

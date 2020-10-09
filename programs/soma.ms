@@ -1,21 +1,19 @@
-stdio acquired Dunder Mifflin
+SABRE ACQUIRED "stdio" and Dunder Mifflin
 
 Scranton():
-	GABE cat1, cat2, cat3
-	cat3 = THATs WHAT SHE SAID soma(cat1, cat2)
-	IF TOBY IS NOT HERE and cat > 10:
-	THATs WHAT SHE SAID print(cat3)
-	TOBY IS HERE. OH WAIT IT WASNT HIM
-	THATs WHAT SHE SAID print(cat3)
+	GABE paper1, paper2, paper3
+	paper3 = THATS WHAT SHE SAID chilli0(paper1, paper2)
+	IF TOBY IS NOT HERE and paper0 > 10:
+	THATS WHAT SHE SAID chilli1(paper3)
+	TOBY IS HERE OH WAIT IT WASNT HIM SO IF paper0 < 0
+	THATS WHAT SHE SAID chilli1(paper3)
 	TOBY IS COMING
-	THATs WHAT SHE SAID print(cat3)
+	THATS WHAT SHE SAID chilli1(paper3)
 	TOBY ARRIVED
-	
-	WORLDS BEST BOSS
 FIRE!
 
-DUNDER MIFFLIN THIS IS soma(GABE cat1, GABE cat2):
-	GABE cat45
-	cat45 = cat1 + cat2
-	DUNDIE GOEST TO cat45
+DUNDER MIFFLIN THIS IS chilli0(GABE paper1, GABE paper2):
+	GABE paper45
+	paper45 = paper1 + paper2
+	DUNDIE GOES TO paper45
 FIRE!

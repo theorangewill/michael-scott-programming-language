@@ -1,7 +1,5 @@
-stdio acquired Dunder Mifflin
+SABRE ACQUIRED "stdio" and Dunder Mifflin
 
 Scranton():
-	THATs WHAT SHE SAID print("Hello, World!")
-	
-	WORLDS BEST BOSS
+	THATS WHAT SHE SAID chilli0("Hello, World!")
 FIRE!
