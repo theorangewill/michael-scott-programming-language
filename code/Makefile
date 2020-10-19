@@ -1,4 +1,4 @@
 all:
-	g++ lexic.cpp main.cpp -o program
+	g++ lexic.cpp main.cpp -g -o program
 clean:
 	rm -rf *.o

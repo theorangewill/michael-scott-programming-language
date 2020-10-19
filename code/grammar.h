@@ -371,4 +371,17 @@ private:
   LinkedList<ObjectPtr<Node> > nodes;
 
 };
+
+class ExpressionNode {
+public:
+  virtual std::string print(){ return "NOTHING";};
+};
+
+class LogicExpressionNode: public ExpressionNode {
+public:
+  virtual std::string print(){ return "NOTHING";};
+  virtual int getRHSType(){ return -1; };
+};
+
+
 #endif // __grammar_h
