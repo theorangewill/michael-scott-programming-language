@@ -2,7 +2,6 @@
 #define __parser_h
 
 #include "lexic.h"
-
 #include "michaelscottgrammar.h"
 
 #ifndef __vector
@@ -14,6 +13,10 @@
   #define __map
   #include <map>
 #endif
+
+static std::string IdentifierStr; // Filled in if tok_identifier
+static double NumVal;             // Filled in if tok_number
+
 
 class Parser{
 public:
