@@ -13,6 +13,7 @@ int main(int argc,char **argv)
   std::fstream file(argv[1], std::fstream::in);
   std::string text;
   Parser parser;
+  MichaelScott *code;
 
   // If occurred a error
   if(file.fail()){
@@ -26,7 +27,8 @@ int main(int argc,char **argv)
   else if(file.good()){
     std::getline( file, text, '\0');
     file.close();
-    parser.parse(text.c_str());
+    code = parser.parse(text.c_str());
+    code->codegen();
   }
   // If it is not alright
   else
