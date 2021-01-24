@@ -8,21 +8,30 @@
 #include "ast.h"
 #include "llvm.h"
 
-static std::map<std::string, llvm::Value*> LLVMNamedValues;
-static std::map<std::string, llvm::AllocaInst*> LLVMVariables;
+extern int globalLineNumber;
+
+extern std::map<std::string, llvm::AllocaInst*> LLVMNamedValues;
+extern std::map<std::string, std::map<std::string, llvm::AllocaInst*>> LLVMVariables;
 //nao sei qual function
-static std::map<std::string, std::unique_ptr<llvm::Function>> LLVMFunctions;
+extern std::map<std::string, std::unique_ptr<llvm::Function>> LLVMFunctions;
 
 llvm::Function *getFunction(std::string name);
 
 class MichaelScottNode: public Node{
 public:
   virtual llvm::Value *codegen() = 0;
+  int localLineNumber;
+  MichaelScottNode();
+  void error();
+  void error(const char* error_warning);
+  void error(const char* error_warning, std::string error_text);
 };
 
 class MichaelScottExpressionNode: public ExpressionNode{
 public:
+  bool negative;
   virtual llvm::Value *codegen() = 0;
+  MichaelScottExpressionNode();
 };
 
 class MichaelScottLogicExpressionNode: public LogicExpressionNode{
@@ -30,7 +39,6 @@ public:
   virtual llvm::Value *codegen() = 0;
 };
 
-class Function;
 
 
 class Variable: public MichaelScottNode, public MichaelScottExpressionNode{
@@ -42,6 +50,7 @@ public:
   Variable(std::string type, std::string name);
   std::string print();
   llvm::Value *codegen();
+  llvm::AllocaInst* getAllocated();  
 };
 
 class Variables: public MichaelScottNode, public List<Variable>{
@@ -165,7 +174,7 @@ public:
 
 class FunctionReturn: public MichaelScottNode{
 public:
-  std::string v;
+  Variable *v;
   FunctionReturn();
   llvm::Value *codegen();
 };

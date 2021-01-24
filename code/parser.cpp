@@ -1,33 +1,62 @@
 #include "parser.h"
 
+int globalLineNumber;
+
+
 Parser::Parser(){
-    MathopPrecedence["+"] = 20;
-    MathopPrecedence["-"] = 20;
-    MathopPrecedence["*"] = 40; 
-    MathopPrecedence["/"] = 40; 
-    MathopPrecedence["%"] = 60; 
-    LogicopPrecedence["OR"] = 20;
-    LogicopPrecedence["AND"] = 40;
-    LogicopPrecedence["NOT"] = 60;
-    TypesDefinition["GABE"] = "double";
-    TypesDefinition["KELLY"] = "short int";
+  this->lineNumber = 0;
+  globalLineNumber = this->lineNumber;
+  MathopPrecedence["+"] = 20;
+  MathopPrecedence["-"] = 20;
+  MathopPrecedence["*"] = 40; 
+  MathopPrecedence["/"] = 40; 
+  MathopPrecedence["%"] = 60; 
+  LogicopPrecedence["OR"] = 20;
+  LogicopPrecedence["AND"] = 40;
+  LogicopPrecedence["NOT"] = 60;
+  TypesDefinition["DARRYL"] = "128int"; // long long int
+  TypesDefinition["PAM"] = "64int"; // long int
+  TypesDefinition["JIM"] = "32int"; // int
+  TypesDefinition["ANDY"] = "16int"; // short int
+  TypesDefinition["ERIN"] = "8int"; // short short int 
+
+  TypesDefinition["STANLEY"] = "1int"; // boolean
+  
+  TypesDefinition["CREED"] = "void"; // void
+
+  TypesDefinition["OSCAR"] = "char"; // char
+  TypesDefinition["KELLY"] = "string"; // string
+
+  TypesDefinition["MICHAEL"] = "128float"; // long double
+  TypesDefinition["PHYLLIS"] = "64float"; // double
+  TypesDefinition["DWIGHT"] = "32float"; // float
+  TypesDefinition["KEVIN"] = "16float"; // short float
+
+  TypesDefinition["GABE"] = "array"; // array
+
+  TypesDefinition["RYAN"] = "u64int"; // unsigned long int
+  TypesDefinition["ANGELA"] = "u32int"; // unsigned int
+  TypesDefinition["TOBY"] = "u16int"; // unsigned short int
+  TypesDefinition["MEREDITH"] = "u8int"; // unsigned short short int
+
+
 };
 
 void Parser::error()
 {
-  printf("**Error [line %d]: unknown\n", lineNumber);
+  printf("**Error [line %d]: unknown\n", this->lineNumber);
   exit(1);
 }
 
 void Parser::error(const char* error_warning)
 {
-  printf("**Error [line %d]: %s\n", lineNumber, error_warning);
+  printf("**Error [line %d]: %s\n", this->lineNumber, error_warning);
   exit(1);
 }
 
 void Parser::error(const char* error_warning, std::string error_text)
 {
-  printf("**Error [line %d]: %s\n\t%s\n", lineNumber, error_warning, error_text.c_str());
+  printf("**Error [line %d]: %s\n\t\t%s\n", this->lineNumber, error_warning, error_text.c_str());
   exit(1);
 }
 
@@ -79,14 +108,24 @@ int Parser::parserSupport(const char* support_text){
   return parser_aux;
 }
 
-Token Parser::nextToken()
-{
+Token Parser::nextToken(){
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-value"
   while (isspace(*buffer)){
-    if(*buffer == '\n') lineNumber++;
+    if(*buffer == '\n'){
+      this->lineNumber++;
+      globalLineNumber = this->lineNumber;
+    }
     *buffer++;
   }
+  while(*buffer == '#'){
+    *buffer++;
+    while(*buffer != '\n') *buffer++;
+    this->lineNumber++;
+    globalLineNumber = this->lineNumber;
+    *buffer++;
+  }
+  while (isspace(*buffer)) *buffer++;
 
   if (*buffer == '\0') return Token(Token::EOF_, std::string("the end"));
   
@@ -94,7 +133,7 @@ Token Parser::nextToken()
   char c2;
   if(c == '(' || c == ')' || c == ':' || c == '!' || c == ',')
     return Token(Token::tok_symbol, std::string(1, c));
-  else if(c == '+' || c == '/' || c == '*' || c == '%')
+  else if(c == '+' || c == '-' || c == '/' || c == '*' || c == '%')
     return Token(Token::tok_mathop, std::string(1, c));
   else if(c == '<' || c == '>'){
     c2 = *buffer++;
@@ -150,23 +189,23 @@ Token Parser::nextToken()
       return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is Else If statement
-    if((support_aux = parserSupport("TOBY IS HERE OH WAIT IT WASNT HIM SO IF"))){
-      if(support_aux > 0){
-        *buffer--;
-        return Token(Token::tok_statement_support, IdentifierStr);
-      }
+    if((support_aux = parserSupport("HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF"))){
+      if(support_aux < 0)
+        error("Wrong If statement support. It should be 'HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF'");
+      *buffer--;
+      return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is Else statement
-    if((support_aux = parserSupport("TOBY IS COMING"))){
-      if(support_aux > 0){
-        *buffer--;
-        return Token(Token::tok_statement_support, IdentifierStr);
-      }
+    if((support_aux = parserSupport("LOOK TOBY IS COMING"))){
+      if(support_aux < 0)
+        error("Wrong If statement support. It should be 'LOOK TOBY IS COMING'");
+      *buffer--;
+      return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is end of If statement
-    if((support_aux = parserSupport("TOBY ARRIVED"))){
+    if((support_aux = parserSupport("DAMN TOBY ARRIVED"))){
       if(support_aux < 0)
-        error("Wrong If statement end support. It should be 'TOBY ARRIVED'. If you meant an Else statement support, it should be 'TOBY IS COMING'. If you ment a Else If statement support, it should be 'TOBY IS HERE OH WAIT IT WASNT HIM SO IF'");
+        error("Wrong If statement support. It should be 'DAMN TOBY ARRIVED'");
       *buffer--;
       return Token(Token::tok_statement_support, IdentifierStr);
     }
@@ -178,18 +217,18 @@ Token Parser::nextToken()
       return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is end of For statement
-    if((support_aux = parserSupport("DWIGHT HAVE KILLED THEM"))){
+    if((support_aux = parserSupport("OH NO DWIGHT HAVE KILLED THEM"))){
       if(support_aux < 0)
-        error("Wrong For statement end support. It should be 'DWIGHT HAVE KILLED THEM'");
+        error("Wrong For statement end support. It should be 'OH NO DWIGHT HAVE KILLED THEM'");
       *buffer--;
       return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is While statement
     if((support_aux = parserSupport("WHILE STANLEY IS SLEEPING and"))){
-      if(support_aux > 0){
-        *buffer--;
-        return Token(Token::tok_statement_support, IdentifierStr);
-      }
+      if(support_aux < 0)
+        error("Wrong While statement end support. It should be 'WHILE STANLEY IS SLEEPING and'");
+      *buffer--;
+      return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is end of While statement
     if((support_aux = parserSupport("THE WORKING DAY IS OVER"))){
@@ -199,9 +238,9 @@ Token Parser::nextToken()
       return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is Do While statement
-    if((support_aux = parserSupport("RYAN DOES"))){
+    if((support_aux = parserSupport("AND RYAN DOES"))){
       if(support_aux < 0)
-        error("Wrong Do While statement support. It should be 'RYAN DOES'");
+        error("Wrong Do While statement support. It should be 'AND RYAN DOES'");
       *buffer--;
       return Token(Token::tok_statement_support, IdentifierStr);
     }
@@ -266,15 +305,58 @@ Token Parser::nextToken()
     if((support_aux = parserSupport("CORPORATE"))){
       return Token(Token::tok_type, IdentifierStr);
     }
-    // If it is a short variable type
+    // If it is variable type
     if((support_aux = parserSupport("KELLY"))){
       return Token(Token::tok_type, IdentifierStr);
     }
-    // If it is a long variable type
     if((support_aux = parserSupport("GABE"))){
       return Token(Token::tok_type, IdentifierStr);
     }
-    // If it is a void variable type
+    if((support_aux = parserSupport("JIM"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("DWIGHT"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("PAM"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("OSCAR"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("ANGELA"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("KEVIN"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("RYAN"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("MICHAEL"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("STANLEY"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("PHYLLIS"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("MEREDITH"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("TOBY"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("DARRYL"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("ANDY"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
+    if((support_aux = parserSupport("ERIN"))){
+      return Token(Token::tok_type, IdentifierStr);
+    }
     if((support_aux = parserSupport("CREED"))){
       return Token(Token::tok_type, IdentifierStr);
     }
@@ -311,10 +393,11 @@ Token Parser::nextToken()
 */
   char* begin_digit = buffer;
   // If it is a digit (it can begins with . - [0-9])
-  if (*buffer == '.' || *buffer == '-' || isdigit(*buffer))
+  ///if (*buffer == '.' || *buffer == '' || isdigit(*buffer))
+  if (*buffer == '.' || isdigit(*buffer))
   {
-    if(*buffer == '-')
-      buffer++;
+    //if(*buffer == '-')
+    //  buffer++;
 
     if(*buffer != '0'){
       ++buffer;
@@ -388,7 +471,8 @@ Token Parser::nextToken()
 MichaelScott* Parser::parse(const char* input)
 {
   buffer = const_cast<char*>(input);
-  lineNumber = 1;
+  this->lineNumber = 1;
+  globalLineNumber = this->lineNumber;
   MichaelScott* mc = michaelscott();
   if (lookahead.type != Token::EOF_)
     error();
@@ -610,8 +694,12 @@ FunctionReturn* Parser::functionreturn()
   FunctionReturn* fr = new FunctionReturn();
   match("DUNDIE GOES TO");
   advance();
-  match(Token::tok_variable);
-  fr->v = lookahead.lexeme;
+  if(lookahead.lexeme == "CREED")
+    fr->v = NULL;
+  else if (lookahead.type == Token::tok_variable)
+    fr->v = variable();
+  else
+    error("Wrong returned value");
   advance();
   printf("<<<<<FunctionReturn");
   return fr;
@@ -659,19 +747,29 @@ Variable* Parser::variable(std::string variable_type)
   return v;
 }
 
+Variable* Parser::variable()
+{
+  Variable* v = new Variable();
+  v->type = "UNDEFINED";
+  match(Token::tok_variable);
+  v->name = lookahead.lexeme;
+  printf("<<<<<Variable");
+  return v;
+}
+
 StatementComponents* Parser::ifstatementcomponents()
 {
 	StatementComponents* c = new StatementComponents();
   advance();
-  if (lookahead.lexeme == "TOBY IS HERE OH WAIT IT WASNT HIM SO IF"
-      || lookahead.lexeme == "TOBY IS COMING"
-      || lookahead.lexeme == "TOBY ARRIVED")
+  if (lookahead.lexeme == "HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF"
+      || lookahead.lexeme == "LOOK TOBY IS COMING"
+      || lookahead.lexeme == "DAMN TOBY ARRIVED")
       return c;
 	while(true) {
 		c->add(statementcomponent());
-		if (lookahead.lexeme == "TOBY IS HERE OH WAIT IT WASNT HIM SO IF"
-      || lookahead.lexeme == "TOBY IS COMING"
-      || lookahead.lexeme == "TOBY ARRIVED"){    
+		if (lookahead.lexeme == "HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF"
+      || lookahead.lexeme == "LOOK TOBY IS COMING"
+      || lookahead.lexeme == "DAMN TOBY ARRIVED"){    
       printf("<<<<<StatementComponents");
       return c;
     }
@@ -682,11 +780,11 @@ StatementComponents* Parser::forstatementcomponents()
 {
 	StatementComponents* c = new StatementComponents();
   advance();
-  if (lookahead.lexeme == "DWIGHT HAVE KILLED THEM")
+  if (lookahead.lexeme == "OH NO DWIGHT HAVE KILLED THEM")
     return c;
 	while(true) {
 		c->add(statementcomponent());
-		if (lookahead.lexeme == "DWIGHT HAVE KILLED THEM"){    
+		if (lookahead.lexeme == "OH NO DWIGHT HAVE KILLED THEM"){    
       printf("<<<<<StatementComponents");
       return c;
     }
@@ -763,7 +861,7 @@ Statement* Parser::statement()
   else if(lookahead.lexeme == "WHILE STANLEY IS SLEEPING and"){
     s->w = whilestatement();
   }
-  else if(lookahead.lexeme == "RYAN DOES"){
+  else if(lookahead.lexeme == "AND RYAN DOES"){
     s->d = dowhilestatement();
   }
   advance();
@@ -774,7 +872,7 @@ Statement* Parser::statement()
 ElseIfStatement* Parser::elseifstatement()
 {
   ElseIfStatement* ei = new ElseIfStatement();
-  match("TOBY IS HERE OH WAIT IT WASNT HIM SO IF");
+  match("HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF");
   advance();
   ei->l = logic();
   match(":");
@@ -789,7 +887,7 @@ ElseIfStatements* Parser::elseifstatements()
   ElseIfStatements* ei = new ElseIfStatements();
 	while(true){
 		ei->add(elseifstatement());
-		if(lookahead.lexeme != "TOBY IS HERE OH WAIT IT WASNT HIM SO IF"){
+		if(lookahead.lexeme != "HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF"){
       printf("<<<<<ElseIfStatements");
 			return ei;
     }
@@ -800,7 +898,7 @@ ElseIfStatements* Parser::elseifstatements()
 ElseStatement* Parser::elsestatement()
 {
   ElseStatement* e = new ElseStatement();
-  match("TOBY IS COMING");
+  match("LOOK TOBY IS COMING");
   advance();
   e->c = ifstatementcomponents();
   printf("<<<<<ElseStatement");
@@ -814,11 +912,11 @@ IfStatement* Parser::ifstatement()
   i->l = logic();
   match(":");
   i->c = ifstatementcomponents();
-  if(lookahead.lexeme == "TOBY IS HERE OH WAIT IT WASNT HIM SO IF")
+  if(lookahead.lexeme == "HEI TOBY IS HERE OH WAIT IT WASNT HIM SO IF")
     i->ei = elseifstatements();
-  if(lookahead.lexeme == "TOBY IS COMING")
+  if(lookahead.lexeme == "LOOK TOBY IS COMING")
     i->e = elsestatement();
-  match("TOBY ARRIVED");
+  match("DAMN TOBY ARRIVED");
   printf("<<<<<IfStatement");
   return i;
 }
@@ -835,7 +933,7 @@ ForStatement* Parser::forstatement()
   f->o = assignments();
   match(":");
   f->c = forstatementcomponents();
-  match("DWIGHT HAVE KILLED THEM");
+  match("OH NO DWIGHT HAVE KILLED THEM");
   printf("<<<<<ForStatement");
   return f;
 }
@@ -856,7 +954,7 @@ WhileStatement* Parser::whilestatement()
 DoWhileStatement* Parser::dowhilestatement()
 {
   DoWhileStatement* d = new DoWhileStatement();
-  match("RYAN DOES");
+  match("AND RYAN DOES");
   advance();
   match(":");
   d->c = dowhilestatementcomponents();
@@ -900,15 +998,33 @@ MichaelScottExpressionNode* Parser::expressionPrecedence(int precedence,
 
 MichaelScottExpressionNode* Parser::expressionprimary()
 {
-  if(lookahead.type == Token::tok_variable)
-    return variable("");
-  else if(lookahead.type == Token::tok_number)
-    return number();
+  std::string signal = "+";
+  MichaelScottExpressionNode* exp;
+  if(lookahead.type == Token::tok_mathop){
+    signal = lookahead.lexeme;
+    advance();
+  }
+  
+  if(lookahead.type == Token::tok_variable){
+    exp = variable();
+    if(signal == "-") exp->negative = true;
+    return exp;
+  }
+  else if(lookahead.type == Token::tok_number){
+    exp = number();
+    if(signal == "-") exp->negative = true;
+    return exp;
+  }
   else if(lookahead.lexeme == "("){
     advance();
-    MichaelScottExpressionNode* e = expression();
+    if(lookahead.type == Token::tok_mathop){
+      signal = lookahead.lexeme;
+      advance();
+    }
+    exp = expression();
+    if(signal == "-") exp->negative = true;
     match(")");
-    return e;
+    return exp;
   }
   error("You should declare a expression using numbers or variables");
   return nullptr;
@@ -953,9 +1069,7 @@ LogicExpression* Parser::logicexpression()
   return le;
 }
 
-
-Logic* Parser::logicPrecedence(int precedence,
-                                      Logic* LHS) {
+Logic* Parser::logicPrecedence(int precedence, Logic* LHS) {
   static int i =0;
   i++;
   int previous_precedence = -1;
@@ -1012,7 +1126,7 @@ MichaelScottLogicExpressionNode* Parser::logicprimary()
 
 Logic* Parser::logic()
 {
-  static int i =0;
+  static int i = 0;
   i++;
   Logic* l = new Logic();
   l->LHS = logicprimary();
@@ -1024,7 +1138,7 @@ Assignment* Parser::assignment()
 {
   Assignment* a = new Assignment();
   bool parenthesis;
-  a->v = variable("");
+  a->v = variable();
   advance();
   match("=");
   advance();
@@ -1032,7 +1146,9 @@ Assignment* Parser::assignment()
     a->f = functioncall();
   }
   else if(lookahead.type == Token::tok_variable
-          || lookahead.type == Token::tok_number){
+          || lookahead.type == Token::tok_number
+          || lookahead.type == Token::tok_mathop
+          || lookahead.lexeme == "("){
     a->e = (Expression*) expression();
     printf("======== %s\n", a->e->print().c_str());
   }
@@ -1048,7 +1164,7 @@ Assignment* Parser::assignmentitem()
 {
   Assignment* a = new Assignment();
   bool parenthesis;
-  a->v = variable("");
+  a->v = variable();
   advance();
   match("=");
   advance();

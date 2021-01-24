@@ -12,8 +12,12 @@
 class Token
 {
 public:
-  Token(int type, std::string lexeme):type(type), lexeme(std::move(lexeme)){}
-  Token(){};
+  int type;
+  std::string lexeme;
+
+  Token(int type, std::string lexeme):type(type), lexeme(std::move(lexeme)){};
+  Token():type(0), lexeme(""){};
+  
 
   void print(){
     std::string type_char;
@@ -72,9 +76,5 @@ public:
     tok_true = -18,
     tok_false = -19
   };
-
-  int type;
-  std::string lexeme;
-
 };
 #endif // __lexic_h

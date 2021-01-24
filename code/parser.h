@@ -14,10 +14,6 @@
   #include <map>
 #endif
 
-static std::string IdentifierStr; // Filled in if tok_identifier
-static double NumVal;             // Filled in if tok_number
-
-
 class Parser{
 public:
   MichaelScott* parse(const char*);
@@ -26,18 +22,21 @@ private:
   char* buffer;
   int lineNumber;
   Token lookahead;
+  std::string IdentifierStr;
   std::map<std::string, int> MathopPrecedence;
   std::map<std::string, int> LogicopPrecedence;
   std::map<std::string, std::string> TypesDefinition;
 
+  void error();
   void error(const char* error_warning);
   void error(const char* error_warning, std::string error_text);
-  void error();
   Token nextToken();
   int parserSupport(const char* support_text);
 
-  void advance(){ lookahead = nextToken(); 
-  lookahead.print();}
+  void advance(){ 
+    lookahead = nextToken(); 
+    lookahead.print();
+  }
 
   void match(int t)
   {
@@ -87,6 +86,7 @@ private:
   VariableDeclaration* variabledeclaration();
   Variables* variables(std::string variable_type);
   Variable* variable(std::string variable_type);
+  Variable* variable();
   StatementComponents* statementcomponents();
   StatementComponent* statementcomponent();
   StatementComponents* ifstatementcomponents();
