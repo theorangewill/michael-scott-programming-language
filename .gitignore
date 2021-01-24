@@ -1,0 +1,5 @@
+/code/*.s
+/code/*.ll
+/code/teste.cpp
+/code/program
+settings.json

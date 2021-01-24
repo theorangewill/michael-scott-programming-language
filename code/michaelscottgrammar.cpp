@@ -130,9 +130,7 @@ llvm::Value* Variable::codegen() {
   llvm::Value* temp = NULL;
   if(LLVMNamedValues.find(this->name) == LLVMNamedValues.end()) 
       error("Variable not declared.", this->name);
-  printf("AA");
   if(current_type and current_type != LLVMNamedValues[this->name]->getAllocatedType()){
-  printf("bb");
     temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
     if(current_type->isFP128Ty())
       temp = createCastLLVM(temp, llvm::Type::getFP128Ty(*LLVMContext));
@@ -150,19 +148,15 @@ llvm::Value* Variable::codegen() {
     if(!this->negative) return temp;
   }
   else if(current_type and current_type == LLVMNamedValues[this->name]->getAllocatedType()){
-  printf("cc");
     if(current_type->isIntegerTy()){
       if(!current_type->isIntegerTy(128) and !current_type->isIntegerTy(64) and !current_type->isIntegerTy(32)){
-        printf("oo");
         temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
         temp = createCastLLVM(temp, llvm::Type::getInt32Ty(*LLVMContext));
         if(!this->negative) return temp;
       }
     }
     else if(current_type->isFloatingPointTy()){
-      printf("OPA");
       if(!current_type->isFP128Ty() and !current_type->isFloatTy() and !current_type->isDoubleTy()){
-        printf("EEEEEEEE");
         temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
         temp = createCastLLVM(temp, llvm::Type::getFloatTy(*LLVMContext));
         if(!this->negative) return temp;
@@ -170,16 +164,13 @@ llvm::Value* Variable::codegen() {
     }
     else error("No extend for this type", this->name);
   }
-  printf("dd");
   if(this->negative){
-  printf("ee");
     if(!temp) temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "negtemp");
     temp = negativeExpression(current_type, temp);
     if(temp) return temp;
     else error("Impossible to negative this variable", this->name);
   }
 
-  printf("ff");
   temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name]);
   return temp;
 }
@@ -207,8 +198,8 @@ llvm::Value* VariableDeclaration::codegen() {
   std::cout << "VARIABLE DECLARATION" << std::endl;
   llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
   llvm::Type *T = getTypeLLVM(this->type);
-  std::cout << "DECLARE: " << this->type << " " << T->getTypeID() << std::endl;
   llvm::Value *init = LLVMValuesInits[this->type];
+
   for (auto i = v->iterator(); i->hasNext();){
     Variable *var = (Variable *) i->next();
 
@@ -219,6 +210,7 @@ llvm::Value* VariableDeclaration::codegen() {
     LLVMBuilder->CreateStore(init, alloca);
     LLVMNamedValues[var->name] = alloca;
   }
+
   return nullptr;
 }
 
@@ -685,6 +677,7 @@ ElseIfStatement::ElseIfStatement(){
 }
 
 llvm::Value* ElseIfStatement::codegen() {
+  std::cout<< "ELSE IF STATEMENT" << std::endl;
   return nullptr;
 }
 
@@ -696,11 +689,84 @@ llvm::Value* ElseIfStatements::codegen() {
 }
 
 IfStatement::IfStatement(){
+  this->c = NULL;
+  this->e = NULL;
+  this->ei = NULL;
   printf(">>>>>IfStatement\n");
 }
 
 llvm::Value* IfStatement::codegen() {
-  return nullptr;
+  std::cout<< "IF STATEMENT" << std::endl;
+  
+  llvm::Value *logic = this->l->codegen();
+  logic = llvm::ConstantInt::get(*LLVMContext, llvm::APInt(1, 0));
+
+  llvm::Value *CondV = LLVMBuilder->CreateFCmpONE(logic, llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(0.0)), "ifcond");
+  
+  llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
+
+  llvm::BasicBlock *ThenBB = llvm::BasicBlock::Create(*LLVMContext, "then", F);
+  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "end");
+  llvm::BasicBlock *ElseBB, *ElifCondBB, *ElifBB, *NextBB;
+
+  if(this->ei){
+    ElifCondBB = llvm::BasicBlock::Create(*LLVMContext, "elifcond");
+    LLVMBuilder->CreateCondBr(CondV, ThenBB, ElifCondBB);
+    if(this->e) ElseBB = llvm::BasicBlock::Create(*LLVMContext, "else");
+  }
+  else if(this->e){
+    ElseBB = llvm::BasicBlock::Create(*LLVMContext, "else");
+    LLVMBuilder->CreateCondBr(CondV, ThenBB, ElseBB);
+  }
+  else
+    LLVMBuilder->CreateCondBr(CondV, ThenBB, EndBB);
+
+  LLVMBuilder->SetInsertPoint(ThenBB);
+  this->c->codegen();
+  LLVMBuilder->CreateBr(EndBB);
+
+  if(this->ei){
+    NextBB = NULL;
+    for(auto i = ei->iterator(); i->hasNext();){
+      ElseIfStatement *elif = i->next(); 
+
+      F->getBasicBlockList().push_back(ElifCondBB);
+      LLVMBuilder->SetInsertPoint(ElifCondBB);
+
+      llvm::Value *eliflogic = elif->l->codegen();
+      eliflogic = llvm::ConstantInt::get(*LLVMContext, llvm::APInt(1, 0));
+      CondV = LLVMBuilder->CreateFCmpONE(eliflogic, llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(0.0)), "ifcond2");
+      
+      ElifBB = llvm::BasicBlock::Create(*LLVMContext, "elif");
+      if(i->hasNext()){
+        ElifCondBB = llvm::BasicBlock::Create(*LLVMContext, "elifcond");
+      }
+      else if(this->e) ElifCondBB = ElseBB;
+      else ElifCondBB = EndBB;
+      LLVMBuilder->CreateCondBr(CondV, ElifBB, ElifCondBB);
+
+      F->getBasicBlockList().push_back(ElifBB);
+      LLVMBuilder->SetInsertPoint(ElifBB);
+      elif->c->codegen();
+      LLVMBuilder->CreateBr(EndBB);
+      //if(i->hasNext()) ElifBB = NextBB;
+    }
+  }
+
+  if(this->e){
+    F->getBasicBlockList().push_back(ElseBB);
+    LLVMBuilder->SetInsertPoint(ElseBB);
+    this->e->c->codegen();
+    LLVMBuilder->CreateBr(EndBB);
+  }
+  
+  F->getBasicBlockList().push_back(EndBB);
+  LLVMBuilder->SetInsertPoint(EndBB);
+  //llvm::PHINode *PN = LLVMBuilder->CreatePHI(llvm::Type::getDoubleTy(*LLVMContext), 2, "iftmp");
+
+  //PN->addIncoming(ThenV, ThenBB);
+  //PN->addIncoming(ElseV, ElseBB);
+  return nullptr; //PN;
 }
 
 ForStatement::ForStatement(){
@@ -728,17 +794,37 @@ llvm::Value* DoWhileStatement::codegen() {
 }
 
 Statement::Statement(){
+  i = NULL;
+  f = NULL;
+  w = NULL;
+  d = NULL;
   printf(">>>>>Statement\n");
 }
 
 llvm::Value* Statement::codegen() {
+  std::cout<< "STATEMENT" << std::endl;
+  if(i) i->codegen();
+  else if(f) f->codegen();
+  else if(w) w->codegen();
+  else if(d) d->codegen();
   return nullptr;
 }
 
 StatementComponent::StatementComponent(){
+  fc = NULL;
+  fr = NULL;
+  vd = NULL;
+  s = NULL;
+  a = NULL;
   printf(">>>>>StatementComponent\n");
 }
 llvm::Value* StatementComponent::codegen() {
+  std::cout<< "STATEMENT COMPONENT" << std::endl;
+  if(fc) fc->codegen();
+  else if(fr) fr->codegen();
+  else if(vd) vd->codegen();
+  else if(s) s->codegen();
+  else if(a) a->codegen();
   return nullptr;
 }
 
@@ -747,6 +833,8 @@ StatementComponents::StatementComponents(){
 }
 
 llvm::Value* StatementComponents::codegen() {
+  for (auto i = this->iterator(); i->hasNext();)
+    i->next()->codegen();
   return nullptr;
 }
 
