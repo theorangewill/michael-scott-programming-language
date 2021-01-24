@@ -58,7 +58,7 @@ DUNDIE GOES TO paper1
 'THATS WHAT SHE SAID ' FunctionName '(' ListVariableCall ')'
 
 ```
-THATS WHAT SHE SAID chilli1('a', 'b', number)
+THATS WHAT SHE SAID chilli1('a', 'b', paper2)
 ```
 
 #### Main declaration
