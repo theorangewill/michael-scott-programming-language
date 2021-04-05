@@ -1,6 +1,9 @@
 #ifndef __ast_h
 #define __ast_h
-
+/*
+The code in this file was implemented by Professor Paulo Pagliosa 
+from Facom - UFMS - Campo Grande - Brazil
+*/
 class Object
 {
 public:

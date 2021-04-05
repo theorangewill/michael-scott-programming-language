@@ -1,27 +1,77 @@
 #include "michaelscottgrammar.h"
 
 std::map<std::string, llvm::AllocaInst*> LLVMNamedValues;
+std::map<std::string, llvm::GlobalVariable*> LLVMGlobalValues;
 std::map<std::string, std::map<std::string, llvm::AllocaInst*>> LLVMVariables;
 //nao sei qual function
 std::map<std::string, std::unique_ptr<llvm::Function>> LLVMFunctions;
 llvm::Type *current_type;
 llvm::Type *function_type;
+bool return_instr;
 
 llvm::Function *getFunction(std::string name) {
-  // First, see if the function has already been added to the current module.
-  if (auto *F = LLVMModule->getFunction(name))
+  if(auto *F = LLVMModule->getFunction(name))
     return F;
-
-  // If not, check whether we can codegen the declaration from some existing
-  // prototype.
-  /*auto FI = LLVMFunctions.find(name);
-  if (FI != LLVMFunctions.end())
-    return (llvm::Function *) FI->second;//->codegen();
-*/
-  // If no existing prototype exists, return null.
   return nullptr;
 }
 
+bool variableExists(std::string name){
+  bool exists = false;
+  if(LLVMNamedValues.find(name) != LLVMNamedValues.end())
+    exists = true;
+  if(LLVMGlobalValues.find(name) != LLVMGlobalValues.end())
+    exists = true;
+  return exists;
+}
+
+bool variableIsGlobal(std::string name){
+  bool is_global = false;
+  if(LLVMGlobalValues.find(name) != LLVMGlobalValues.end())
+    is_global = true;
+  return is_global;
+}
+
+bool variableIsLocal(std::string name){
+  bool is_local = false;
+  if(LLVMNamedValues.find(name) != LLVMNamedValues.end())
+    is_local = true;
+  return is_local;
+}
+
+llvm::Type* getVariableType(std::string name){
+  bool exists = false;
+  if(variableExists(name)){
+    if(LLVMNamedValues.find(name) != LLVMNamedValues.end())
+      return LLVMNamedValues[name]->getAllocatedType();
+    if(LLVMGlobalValues.find(name) != LLVMGlobalValues.end())
+      return LLVMGlobalValues[name]->getType()->getElementType();
+  }
+  printf("**Error This variable does not exist: %s\n", name.c_str());
+  exit(1);
+  return nullptr;
+}
+
+llvm::AllocaInst* getLocalVariable(std::string name){
+  bool exists = false;
+  if(variableExists(name)){
+    if(LLVMNamedValues.find(name) != LLVMNamedValues.end())
+      return LLVMNamedValues[name]; 
+  }
+  printf("**Error This variable does not exist: %s\n", name.c_str());
+  exit(1);
+  return nullptr;
+}
+
+llvm::GlobalVariable* getGlobalVariable(std::string name){
+  bool exists = false;
+  if(variableExists(name)){
+    if(LLVMGlobalValues.find(name) != LLVMGlobalValues.end())
+      return LLVMGlobalValues[name];  
+  }
+  printf("**Error This variable does not exist: %s\n", name.c_str());
+  exit(1);
+  return nullptr;
+}
 
 void MichaelScottNode::error()
 {
@@ -57,12 +107,12 @@ llvm::Value* MichaelScott::codegen() {
   std::cout << std::endl;
   return c->codegen();
 }
+
 Include::Include(){
   printf(">>>>>Include\n");
 }
 
 llvm::Value* Include::codegen() {
-  std::cout<< "INCLUDE" << std::endl;
   return nullptr;
 }
 
@@ -72,6 +122,17 @@ GlobalVariableDeclaration::GlobalVariableDeclaration(){
 
 llvm::Value* GlobalVariableDeclaration::codegen() {
   std::cout<< "GLOBAL VARIABLE DECLARATION" << std::endl;
+  llvm::Type *T = getTypeLLVM(this->vd->type);
+  llvm::Constant *init = LLVMValuesInits[this->vd->type];
+  for (auto i = this->vd->v->iterator(); i->hasNext();){
+    Variable *var = (Variable *) i->next();
+    if(LLVMGlobalValues.find(var->name) != LLVMGlobalValues.end()) 
+        error("Global variable already declared.", var->name);
+    llvm::GlobalVariable* globalvar = new llvm::GlobalVariable(*LLVMModule, T, false,
+                                  llvm::GlobalValue::CommonLinkage, init, "global");
+    //globalvar->setAlignment(llvm::MaybeAlign(4));
+    LLVMGlobalValues[var->name] = globalvar;
+  }
   return nullptr;
 }
 
@@ -79,6 +140,7 @@ Component::Component(){
   i = NULL;
   gvd = NULL;
   f = NULL;
+  main = NULL;
   printf(">>>>>Component\n");
 }
 
@@ -87,6 +149,7 @@ llvm::Value* Component::codegen() {
   if(i) i->codegen();
   else if(gvd) gvd->codegen();
   else if(f) f->codegen();
+  else if(main) main->codegen();
   return nullptr;
 }
 
@@ -94,26 +157,26 @@ Components::Components(){
   printf(">>>>>Components\n");
 }
 llvm::Value* Components::codegen() {
-  std::cout<< "HI" << std::endl;
   //for(it = this->iterator(); this->iterator().hasNext(); this)
   for (IteratorPtr i = this->iterator(); i->hasNext();)
     i->next()->codegen();
-  std::cout<< "BYE" << std::endl;
   return nullptr;
 }
 
 /******************* Methods related to variables ****************************/
-
 Variable::Variable(){
+  this->array = false;
   printf(">>>>>Variable\n");
 }
 
 Variable::Variable(std::string type):type(move(type)){
+  this->array = false;
   printf(">>>>>Variable\n");
 }
 
 Variable::Variable(std::string type, std::string name):
             type(move(type)), name(move(name)){
+  this->array = false;
   printf(">>>>>Variable\n");
 }
 
@@ -125,13 +188,16 @@ std::string Variable::print(){
 
 llvm::Value* Variable::codegen() {
   std::cout << "VARIABLE" << std::endl;
-  std::cout << LLVMNamedValues[this->name]->getAllocatedType()->getTypeID() << std::endl;
-  std::cout << current_type->getTypeID()   << std::endl;
+  //std::cout << LLVMNamedValues[this->name]->getAllocatedType()->getTypeID() << std::endl;
+  //std::cout << current_type->getTypeID()   << std::endl;
   llvm::Value* temp = NULL;
-  if(LLVMNamedValues.find(this->name) == LLVMNamedValues.end()) 
-      error("Variable not declared.", this->name);
-  if(current_type and current_type != LLVMNamedValues[this->name]->getAllocatedType()){
-    temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
+  if(!variableExists(this->name)) 
+    error("Variable not declared.", this->name);
+  if(current_type and current_type != getVariableType(this->name)){
+    if(variableIsLocal(this->name))
+      temp = LLVMBuilder->CreateLoad(getLocalVariable(this->name), "casttemp");
+    else if(variableIsGlobal(this->name))
+      temp = LLVMBuilder->CreateLoad(getGlobalVariable(this->name), "casttemp");
     if(current_type->isFP128Ty())
       temp = createCastLLVM(temp, llvm::Type::getFP128Ty(*LLVMContext));
     else if(current_type->isDoubleTy())
@@ -147,17 +213,23 @@ llvm::Value* Variable::codegen() {
     else error("Uncastable type", this->name);
     if(!this->negative) return temp;
   }
-  else if(current_type and current_type == LLVMNamedValues[this->name]->getAllocatedType()){
+  else if(current_type and current_type == getVariableType(this->name)){
     if(current_type->isIntegerTy()){
       if(!current_type->isIntegerTy(128) and !current_type->isIntegerTy(64) and !current_type->isIntegerTy(32)){
-        temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
+        if(variableIsLocal(this->name))
+          temp = LLVMBuilder->CreateLoad(getLocalVariable(this->name), "casttemp");
+        else if(variableIsGlobal(this->name))
+          temp = LLVMBuilder->CreateLoad(getGlobalVariable(this->name), "casttemp");
         temp = createCastLLVM(temp, llvm::Type::getInt32Ty(*LLVMContext));
         if(!this->negative) return temp;
       }
     }
     else if(current_type->isFloatingPointTy()){
       if(!current_type->isFP128Ty() and !current_type->isFloatTy() and !current_type->isDoubleTy()){
-        temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "casttemp");
+        if(variableIsLocal(this->name))
+          temp = LLVMBuilder->CreateLoad(getLocalVariable(this->name), "casttemp");
+        else if(variableIsGlobal(this->name))
+          temp = LLVMBuilder->CreateLoad(getGlobalVariable(this->name), "casttemp");
         temp = createCastLLVM(temp, llvm::Type::getFloatTy(*LLVMContext));
         if(!this->negative) return temp;
       }
@@ -165,20 +237,27 @@ llvm::Value* Variable::codegen() {
     else error("No extend for this type", this->name);
   }
   if(this->negative){
-    if(!temp) temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name], "negtemp");
+    if(!temp){
+      if(variableIsLocal(this->name))
+        temp = LLVMBuilder->CreateLoad(getLocalVariable(this->name), "negtemp");
+      else if(variableIsGlobal(this->name))
+        temp = LLVMBuilder->CreateLoad(getGlobalVariable(this->name), "negtemp");
+    }
     temp = negativeExpression(current_type, temp);
     if(temp) return temp;
     else error("Impossible to negative this variable", this->name);
   }
-
-  temp = LLVMBuilder->CreateLoad(LLVMNamedValues[this->name]);
+  if(variableIsLocal(this->name))
+    temp = LLVMBuilder->CreateLoad(getLocalVariable(this->name));
+  else if(variableIsGlobal(this->name))
+    temp = LLVMBuilder->CreateLoad(getGlobalVariable(this->name));
   return temp;
 }
 
-llvm::AllocaInst* Variable::getAllocated(){
-  if(LLVMNamedValues.find(this->name) == LLVMNamedValues.end()) 
-      error("Variable not declared.", this->name);
-  return LLVMNamedValues[this->name];
+llvm::Type* Variable::getTypeOfExpression(){
+  if(!variableExists(this->name))
+    error("Variable not declared.", this->name);
+  return getVariableType(this->name);
 }
 
 Variables::Variables(){
@@ -187,6 +266,14 @@ Variables::Variables(){
 
 llvm::Value* Variables::codegen() {
   std::cout << "VARIABLESSSS" << std::endl;
+  return nullptr;
+}
+
+ArrayDeclaration::ArrayDeclaration(){
+  printf(">>>>>ArrayDeclaration\n");
+}
+
+llvm::Value* ArrayDeclaration::codegen() {
   return nullptr;
 }
 
@@ -203,8 +290,8 @@ llvm::Value* VariableDeclaration::codegen() {
   for (auto i = v->iterator(); i->hasNext();){
     Variable *var = (Variable *) i->next();
 
-    if(LLVMNamedValues.find(var->name) != LLVMNamedValues.end()) 
-        error("Variable already declared.", var->name);
+    if(variableExists(var->name))
+      error("Variable already declared.", var->name);
 
     llvm::AllocaInst *alloca = createEntryBlockAlloca(F, var->name, T);
     LLVMBuilder->CreateStore(init, alloca);
@@ -230,26 +317,46 @@ llvm::Value* Number::codegen() {
   std::cout << "NUMBER" << std::endl;
   double value = this->val;
   if(this->negative) value = (-1)*value;
+  
   if(current_type->isFP128Ty())
-    return llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(value));
+    return llvm::ConstantFP::get(llvm::Type::getFP128Ty(*LLVMContext), value);
   else if(current_type->isDoubleTy())
-    return llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(value));
+    return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*LLVMContext), value);
+  else if(current_type->isFloatTy())
+    return llvm::ConstantFP::get(llvm::Type::getFloatTy(*LLVMContext), value);
+  else if(current_type->isHalfTy())
+    return llvm::ConstantFP::get(llvm::Type::getHalfTy(*LLVMContext), value);
   else if(current_type->isFloatingPointTy())
-    return llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(value));
+    return llvm::ConstantFP::get(llvm::Type::getFloatTy(*LLVMContext), value);
+
   else if(current_type->isIntegerTy(128))
-    return llvm::ConstantInt::get(*LLVMContext, llvm::APInt(128, value));
+    return llvm::ConstantInt::get(llvm::Type::getInt128Ty(*LLVMContext), value, true);
   else if(current_type->isIntegerTy(64))
-    return llvm::ConstantInt::get(*LLVMContext, llvm::APInt(64, value));
+    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*LLVMContext), value, true);
+  else if(current_type->isIntegerTy(32))
+    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*LLVMContext), value, true);
+  else if(current_type->isIntegerTy(16))
+    return llvm::ConstantInt::get(llvm::Type::getInt16Ty(*LLVMContext), value, true);
+  else if(current_type->isIntegerTy(8))
+    return llvm::ConstantInt::get(llvm::Type::getInt8Ty(*LLVMContext), value, true);
+  else if(current_type->isIntegerTy(1))
+    return llvm::ConstantInt::get(llvm::Type::getInt1Ty(*LLVMContext), value);
   else if(current_type->isIntegerTy())
-    return llvm::ConstantInt::get(*LLVMContext, llvm::APInt(32, value));
+    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*LLVMContext), value, true);
   return nullptr;
+}
+
+llvm::Type* Number::getTypeOfExpression(){
+  if(floor(this->val) == this->val)
+    return llvm::Type::getFloatTy(*LLVMContext);
+  else
+    return llvm::Type::getInt32Ty(*LLVMContext);
 }
 
 /*****************************************************************************/
 /******************* Methods related to expressions **************************/
 
 MichaelScottExpressionNode::MichaelScottExpressionNode() : negative(false){};
-
 
 Assignment::Assignment(){
   e = NULL;
@@ -260,16 +367,27 @@ Assignment::Assignment(){
 llvm::Value* Assignment::codegen() {
   std::cout<< "ASSIGNMENT" << std::endl;
   current_type = NULL;
-  llvm::AllocaInst *variable = this->v->getAllocated();
-  current_type = variable->getAllocatedType();
-  std::cout << current_type->getTypeID() << std::endl;
-  llvm::Value *assignment_value;
-  if(this->e) assignment_value = this->e->codegen();
-  else if(this->f) assignment_value = this->f->codegen();
-  std::cout << assignment_value->getType()->getTypeID() << " " <<  current_type->getTypeID() << std::endl;
-  assignment_value = createCastLLVM(assignment_value, current_type);
-  printf("___________________\n");
-  LLVMBuilder->CreateStore(assignment_value, variable);
+
+  if(variableIsLocal(this->v->name)){
+    llvm::AllocaInst *variable = getLocalVariable(this->v->name);
+    current_type = variable->getAllocatedType();
+    llvm::Value *assignment_value;
+    if(this->e) assignment_value = this->e->codegen();
+    else if(this->f) assignment_value = this->f->codegen();
+    //std::cout << assignment_value->getType()->getTypeID() << " " <<  current_type->getTypeID() << std::endl;
+    assignment_value = createCastLLVM(assignment_value, current_type);
+    LLVMBuilder->CreateStore(assignment_value, variable);
+  }
+  else if(variableIsGlobal(this->v->name)){
+    llvm::GlobalVariable *globalvariable = getGlobalVariable(this->v->name);
+    current_type = globalvariable->getType()->getElementType();
+    llvm::Value *assignment_value;
+    if(this->e) assignment_value = this->e->codegen();
+    else if(this->f) assignment_value = this->f->codegen();
+    //std::cout << assignment_value->getType()->getTypeID() << " " <<  current_type->getTypeID() << std::endl;
+    assignment_value = createCastLLVM(assignment_value, current_type);
+    LLVMBuilder->CreateStore(assignment_value, globalvariable);
+  }
   return nullptr;
 }
 
@@ -279,6 +397,9 @@ Assignments::Assignments(){
 
 llvm::Value* Assignments::codegen() {
   std::cout<< "ASSIGNMENTS" << std::endl;
+  //for(it = this->iterator(); this->iterator().hasNext(); this)
+  for (IteratorPtr i = this->iterator(); i->hasNext();)
+    i->next()->codegen();
   return nullptr;
 }
 
@@ -300,6 +421,11 @@ std::string Expression::print(){
   return s+">"+lhs+"< "+op+" >"+rhs+"<"+f;
 }
 
+llvm::Type* Expression::getTypeOfExpression(){
+  return this->LHS->getTypeOfExpression();
+}
+
+
 llvm::Value* Expression::codegen() {
   std::cout << "EXPRESSION" << std::endl;
 
@@ -318,7 +444,6 @@ llvm::Value* Expression::codegen() {
     return returned_expression;
   }
   else if(this->op == "-"){
-    std::cout<< current_type->getTypeID() << std::endl;
     if(current_type->isFloatingPointTy())
       returned_expression = LLVMBuilder->CreateFSub(L, R, "subtmp");
     else if(current_type->isIntegerTy())
@@ -354,11 +479,6 @@ llvm::Value* Expression::codegen() {
     if(this->negative) returned_expression = negativeExpression(current_type, returned_expression);
     return returned_expression;
   }
-  else if(this->op == "<"){
-    L = LLVMBuilder->CreateFCmpULT(L, R, "cmptmp");
-    // Convert bool 0/1 to double 0.0 or 1.0
-    return LLVMBuilder->CreateUIToFP(L, llvm::Type::getDoubleTy(*LLVMContext), "booltmp");
-  }
   return nullptr;
 }
 
@@ -391,6 +511,72 @@ int LogicExpression::getRHSType(){
 };
 
 llvm::Value* LogicExpression::codegen() {
+  std::cout << "LOGIC EXPRESSION" << std::endl;
+  current_type = this->LHS->getTypeOfExpression();
+  
+  llvm::Value *L = this->LHS->codegen();
+  llvm::Value *R = this->RHS->codegen();
+  printf("%p %p %s", L, R, this->op.c_str());
+  if (!L || !R)
+    return nullptr;
+
+  llvm::Value *returned_expression;
+  if(this->op == "<"){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpULT(L, R, "lesstmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpSLT(L, R, "lesstmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+    // Convert bool 0/1 to double 0.0 or 1.0
+    //return LLVMBuilder->CreateUIToFP(L, llvm::Type::getDoubleTy(*LLVMContext),"booltmp");
+  }
+  else if(this->op == "<="){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpULE(L, R, "lessequaltmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpSLE(L, R, "lessequaltmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+  }
+  else if(this->op == ">"){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpUGT(L, R, "greattmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpSGT(L, R, "greattmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+  }
+  else if(this->op == ">="){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpUGE(L, R, "greatequaltmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpSGE(L, R, "greatequaltmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+  }
+  else if(this->op == "=="){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpUEQ(L, R, "equaltmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpEQ(L, R, "equaltmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+  }
+  else if(this->op == "=!"){
+    if(current_type->isFloatingPointTy())
+      returned_expression = LLVMBuilder->CreateFCmpUNE(L, R, "notequaltmp");
+    if(current_type->isIntegerTy())
+      returned_expression = LLVMBuilder->CreateICmpNE(L, R, "notequaltmp");
+    else return nullptr;
+    if(this->notLHS) returned_expression = LLVMBuilder->CreateNot(returned_expression, "nottmp");
+    return returned_expression;
+  }
   return nullptr;
 }
 
@@ -463,18 +649,33 @@ void Logic::addRHS(std::string operation, MichaelScottLogicExpressionNode* newRH
   };
 }
 
-int Logic::getRHSType(){ return 2; };
+int Logic::getRHSType(){
+  return 2;
+};
 
 llvm::Value* Logic::codegen() {
-  return nullptr;
+  std::cout << "LOGIC" << std::endl;
+  llvm::Value *L = this->LHS->codegen();
+  llvm::Value *R = NULL;
+  if(this->RHS) R = this->RHS->codegen();
+  else return L;
+  llvm::Value *returned_expression;
+
+  if(this->op == "snap")
+    returned_expression = LLVMBuilder->CreateAnd(L, R, "andtmp");
+  else if(this->op == "snip")
+    returned_expression = LLVMBuilder->CreateOr(L, R, "ortmp");
+  else if(this->op == "no god no")
+    returned_expression = LLVMBuilder->CreateNot(R, "nottmp");
+  return returned_expression;
 }
 
 /*****************************************************************************/
 /******************* Methods related to functions **************************/
 
-
 Argument::Argument(){
   printf(">>>>>Argument\n");
+  num = NULL;
 }
 
 llvm::Value* Argument::codegen() {
@@ -490,11 +691,60 @@ llvm::Value* Arguments::codegen() {
 }
 
 FunctionCall::FunctionCall(){
+  this->args = NULL;
   printf(">>>>>FunctionCall\n");
 }
 
 llvm::Value* FunctionCall::codegen() {
-  return nullptr;
+  std::cout<< "FUNCTION CALL" << std::endl;
+  llvm::Function *function = getFunction(this->name);
+  llvm::FunctionCallee functionprot;
+  if(!function){
+    printf("Unknown function reference, making a prototype for: %s\n", this->name.c_str());
+    std::vector<llvm::Type *> ptypes;
+    for (auto i = this->args->iterator(); i->hasNext();){
+      Argument *arg = i->next();
+      llvm::Type *type = getVariableType(arg->name);
+      ptypes.push_back(type);
+    }
+    llvm::Type *rtype = current_type;
+    llvm::FunctionType *ftype = llvm::FunctionType::get(rtype, ptypes, false);
+    functionprot = LLVMModule->getOrInsertFunction(this->name.c_str(), ftype);
+  }
+  else if(function->arg_size() != this->args->size()){
+    printf("Incorrect amount arguments passed for function, making a prototype for: %s", this->name.c_str());
+    std::vector<llvm::Type *> ptypes;
+    for (auto i = this->args->iterator(); i->hasNext();){
+      Argument *arg = i->next();
+      llvm::Type *type = getVariableType(arg->name);
+      ptypes.push_back(type);
+    }
+    llvm::Type *rtype = current_type;
+    llvm::FunctionType *ftype = llvm::FunctionType::get(rtype, ptypes, false);
+    functionprot = LLVMModule->getOrInsertFunction(this->name.c_str(), ftype);
+  }
+  std::vector<llvm::Value *> arguments;
+  for(auto i = this->args->iterator(); i->hasNext();){
+    Argument *arg = i->next();
+    if(arg->num)
+      arguments.push_back(arg->num->codegen());
+    else{
+      if(variableIsLocal(arg->name)){
+        // TODO: pointer
+        llvm::AllocaInst* variable = getLocalVariable(arg->name);
+        llvm::Value* loaded_variable = LLVMBuilder->CreateLoad(variable, "arg");
+        arguments.push_back(loaded_variable);
+      }
+      else if(variableIsGlobal(arg->name)){
+        error("You should not use global variables as parameter", arg->name);
+      }
+    }
+  }
+  if(function)
+    return LLVMBuilder->CreateCall(function, arguments, "calltmp");
+  else{
+    return LLVMBuilder->CreateCall(functionprot, arguments, "calltmp");
+  }
 }
 
 Parameter::Parameter(){
@@ -517,14 +767,14 @@ FunctionReturn::FunctionReturn(){
 }
 
 llvm::Value* FunctionReturn::codegen() {
+  return_instr = true;
   current_type = function_type;
-  if(function_type == llvm::Type::getVoidTy(*LLVMContext)){
-    if(this->v) error("You are trying to return a paper in a CREED function");
-    return LLVMBuilder->CreateRetVoid();
-  }
+  if(function_type == llvm::Type::getVoidTy(*LLVMContext))
+    error("You are trying to return a paper in a CREED function");
   else if(this->v){
     //todo: nao ta fazendo cast
-    llvm::Value* temp = LLVMBuilder->CreateLoad(this->v->getAllocated(), "return");
+    //llvm::Value* temp = LLVMBuilder->CreateLoad(this->v->getAllocated(), "return");
+    llvm::Value* temp = this->v->codegen();
     return LLVMBuilder->CreateRet(temp);
   }
   error("You have not defined a value to return");
@@ -534,6 +784,8 @@ llvm::Value* FunctionReturn::codegen() {
 FunctionComponent::FunctionComponent(){
   fc = NULL;
   fr = NULL;
+  fp = NULL;
+  fs = NULL;
   vd = NULL;
   s = NULL;
   a = NULL;
@@ -544,6 +796,8 @@ llvm::Value* FunctionComponent::codegen() {
   std::cout<< "FUNCTION COMPONENT" << std::endl;
   if(fc) fc->codegen();
   else if(fr) fr->codegen();
+  else if(fp) fp->codegen();
+  else if(fs) fs->codegen();
   else if(vd) vd->codegen();
   else if(s) s->codegen();
   else if(a) a->codegen();
@@ -567,12 +821,14 @@ Function::Function(){
 
 llvm::Value* Function::codegen() {
   std::cout<< "FUNCTION" << std::endl;
-
   std::vector<llvm::Type *> ptypes;
   std::vector<std::string> pnames;
 
-  for (auto i = p->iterator(); i->hasNext();){
-    Parameter *par = i->next(); 
+  if(getFunction(this->name))
+    error("This function already exists.", this->name);
+
+  for (auto i = this->p->iterator(); i->hasNext();){
+    Parameter *par = i->next();
     std::string type = par->type;
     std::string name = par->name;
     if(std::find(pnames.begin(), pnames.end(), name) != pnames.end())
@@ -598,17 +854,7 @@ llvm::Value* Function::codegen() {
 
   llvm::BasicBlock *BBentry = llvm::BasicBlock::Create(*LLVMContext, "entry", F);
   LLVMBuilder->SetInsertPoint(BBentry);
-  /*
-  int num_func=1;
-  std::string name_func;
-  while(true){
-    name_func = std::string(this->name)+"_"+std::to_string(num_func);
-    if (LLVMVariables.find(name_func) == LLVMVariables.end()) {
-      break;
-    }
-    num_func++;
-  }
-  */
+
   LLVMNamedValues.clear();
   for (auto &Arg : F->args()) {
     std::string arg_name = std::string(Arg.getName());
@@ -622,42 +868,242 @@ llvm::Value* Function::codegen() {
     LLVMNamedValues[arg_name] = alloca;
   }
   
-/*
-  for (auto it = LLVMNamedValues.begin(); it != LLVMNamedValues.end(); it++)
-  {
-      std::cout << it->first    // string (key)
-            << ':'
-            << it->second
-            << std::endl; 
-  }
-*/
-
+  return_instr = false;
   this->body->codegen();
-
-
+  if(function_type == llvm::Type::getVoidTy(*LLVMContext))
+    LLVMBuilder->CreateRetVoid();
+  else if(!return_instr)
+    error("No return from function", this->name);
+  
   // Validate the generated code, checking for consistency.
   llvm::verifyFunction(*F);
 
   // Run the optimizer on the function.
   //LLVMFPM->run(*F);
 
-  //LLVMBuilder->SetInsertPoint(BBbody);
   F->print(llvm::errs());
 
   return F;
-  if (llvm::Value *RetVal = this->body->codegen()) {
-    // Finish off the function.
-    LLVMBuilder->CreateRet(RetVal);
-
-    // Validate the generated code, checking for consistency.
-    llvm::verifyFunction(*F);
-
-    // Run the optimizer on the function.
-    LLVMFPM->run(*F);
+}
 
 
-    F->print(llvm::errs());
+/*****************************************************************************/
+/******************* Methods related to main function ************************/
+bool MainFunction::created = false;
+
+MainFunction::MainFunction(){
+  if(this->created)
+    error("There is more than one Scranton function.");
+  this->created = true;
+  printf(">>>>>MainFunction\n");
+}
+
+llvm::Value* MainFunction::codegen() {
+  std::cout<< "MAIN FUNCTION" << std::endl;
+  std::vector<llvm::Type *> ptypes;
+  std::vector<std::string> pnames;
+
+  for (auto i = this->p->iterator(); i->hasNext();){
+    Parameter *par = i->next(); 
+    std::string type = par->type;
+    std::string name = par->name;
+    if(std::find(pnames.begin(), pnames.end(), name) != pnames.end())
+      error("More than one parameter with the same name in the function",
+            "Scranton >> " + name);
+    pnames.push_back(name);
+    ptypes.push_back(getTypeLLVM(type));
   }
+
+  llvm::FunctionType *main_type = llvm::FunctionType::get(llvm::Type::getInt32Ty(*LLVMContext), 
+                                                    //ptypes,
+                                                    false);
+
+  llvm::Function *main = llvm::Function::Create(main_type, llvm::Function::ExternalLinkage, 
+                                                "main", LLVMModule.get());
+  function_type = main_type->getReturnType();
+  
+  // Set names for all arguments.
+  unsigned idx = 0;
+  for (auto &arg : main->args()){
+    arg.setName(pnames[idx++]);
+  }
+  
+
+  llvm::BasicBlock *BBentry = llvm::BasicBlock::Create(*LLVMContext, "entry", main);
+  LLVMBuilder->SetInsertPoint(BBentry);
+  // TODO: argc e argv
+  LLVMNamedValues.clear();
+  for (auto &Arg : main->args()) {
+    std::string arg_name = std::string(Arg.getName());
+    // Create an alloca for this variable.
+    llvm::AllocaInst *alloca = createEntryBlockAlloca(main, arg_name+"_", Arg.getType());
+
+    // Store the initial value into the alloca.
+    LLVMBuilder->CreateStore(&Arg, alloca);
+
+    // Add arguments to variable symbol table.
+    LLVMNamedValues[arg_name] = alloca;
+  }
+  
+  this->body->codegen();
+
+  LLVMBuilder->CreateRet(llvm::ConstantInt::get(*LLVMContext, llvm::APInt(32, 0)));
+
+  // Validate the generated code, checking for consistency.
+  llvm::verifyFunction(*main);
+
+  // Run the optimizer on the function.
+  //LLVMFPM->run(*F);
+
+  main->print(llvm::errs());
+  return main;
+}
+
+
+/*****************************************************************************/
+/******************* Methods related to print function ***********************/
+
+PrintFunctionCall::PrintFunctionCall(){
+  this->args = NULL;
+  printf(">>>>>PrintFunctionCall\n");
+}
+
+llvm::Value* PrintFunctionCall::codegen() {
+  std::cout<< "PRINT FUNCTION" << std::endl;
+  llvm::Type *intType = llvm::Type::getInt32Ty(*LLVMContext);
+  std::vector<llvm::Type *> printfArgsTypes({llvm::Type::getInt8PtrTy(*LLVMContext)});
+  llvm::FunctionType *printfType = llvm::FunctionType::get(intType, printfArgsTypes, true);
+  llvm::FunctionCallee printfFunc = LLVMModule->getOrInsertFunction("printf", printfType);
+  
+  std::string print_string = "";
+  std::vector<llvm::Value *> arguments;
+  for(auto i = this->args->iterator(); i->hasNext();){
+    Argument *arg = i->next();
+    // Get the arguments
+    if(!print_string.empty()) print_string += " ";
+    if(!arg->str.empty())
+      print_string.append(arg->str);
+    else{
+      if(!variableExists(arg->name))
+        error("Variable does not exist", arg->name);
+      llvm::Value* loaded_variable;
+      llvm::Type *variable_type;
+      if(variableIsLocal(arg->name)){
+        llvm::AllocaInst* variable = getLocalVariable(arg->name);
+        loaded_variable = LLVMBuilder->CreateLoad(variable, "printarg");
+        variable_type = variable->getAllocatedType();
+      }
+      else if(variableIsGlobal(arg->name)){
+        llvm::GlobalVariable *globalvariable = getGlobalVariable(arg->name);
+        variable_type = globalvariable->getType()->getElementType();
+        loaded_variable = LLVMBuilder->CreateLoad(globalvariable, "printarg");
+      }
+      // Construct the string
+      if(variable_type->isFP128Ty())
+        print_string += "%f";
+      else if(variable_type->isDoubleTy())
+        print_string += "%f";
+      else if(variable_type->isFloatingPointTy()){
+        loaded_variable = createCastLLVM(loaded_variable, llvm::Type::getDoubleTy(*LLVMContext));
+        print_string += "%f";
+      }
+      else if(variable_type->isIntegerTy(128))
+        print_string += "%lld";
+      else if(variable_type->isIntegerTy(64))
+        print_string += "%lld";
+      else if(variable_type->isIntegerTy(8))
+        print_string += "%d";
+      else if(variable_type->isIntegerTy())
+        print_string += "%d";
+      arguments.push_back(loaded_variable);
+    }
+  }
+  print_string += "\n";
+  llvm::Value *print_str = LLVMBuilder->CreateGlobalStringPtr(print_string, "print_str");
+  arguments.insert(arguments.begin(), print_str);
+  return LLVMBuilder->CreateCall(printfFunc, arguments, "printtmp");
+}
+
+/*****************************************************************************/
+/******************* Methods related to scan function ***********************/
+
+ScanFunctionCall::ScanFunctionCall(){
+  this->args = NULL;
+  printf(">>>>>ScanFunctionCall\n");
+}
+
+llvm::Value* ScanFunctionCall::codegen() {
+  std::cout<< "SCAN FUNCTION" << std::endl;
+
+  std::vector<llvm::Type *> scanArgsTypes({llvm::Type::getInt8PtrTy(*LLVMContext)});
+  llvm::FunctionType *scanType = llvm::FunctionType::get(LLVMBuilder->getInt32Ty(),
+                                                          scanArgsTypes, true);
+  llvm::FunctionCallee scanFunc = LLVMModule->getOrInsertFunction("__isoc99_scanf", scanType);
+
+  std::string scan_string = "";
+  std::vector<llvm::Value *> arguments;
+  std::map<llvm::Value *, llvm::Value *> convert_from32int_to8int;
+  for(auto i = this->args->iterator(); i->hasNext();){
+    Argument *arg = i->next();
+    // Get the arguments
+    if(!variableExists(arg->name))
+      error("Variable does not exist", arg->name);
+    llvm::Value* variable_parameter;
+    llvm::Type *variable_type;
+    if(variableIsLocal(arg->name)){
+      llvm::AllocaInst* variable = getLocalVariable(arg->name);
+      variable_type = variable->getAllocatedType();
+      if(variable_type->isIntegerTy(8)){
+        llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
+        llvm::Type *T =  llvm::Type::getInt32Ty(*LLVMContext);
+        llvm::AllocaInst *alloca = createEntryBlockAlloca(F, "scanargcastfrom", T);
+        convert_from32int_to8int[alloca] = variable;
+        variable_parameter = alloca;
+      }
+      else{
+        variable_parameter = variable;
+      }
+    }
+    else if(variableIsGlobal(arg->name)){
+      llvm::GlobalVariable *globalvariable = getGlobalVariable(arg->name);
+      variable_type = globalvariable->getType()->getElementType();
+      variable_parameter = globalvariable;
+    }
+    // Construct the string
+    if(!scan_string.empty()) scan_string += " ";
+    if(variable_type->isFP128Ty())
+      scan_string += "%lf";
+    else if(variable_type->isDoubleTy())
+      scan_string += "%lf";
+    else if(variable_type->isFloatingPointTy())
+      scan_string += "%f";
+    else if(variable_type->isIntegerTy(128))
+      scan_string += "%lld";
+    else if(variable_type->isIntegerTy(64))
+      scan_string += "%lld";
+    else if(variable_type->isIntegerTy(16))
+      scan_string += "%hd";
+    else if(variable_type->isIntegerTy(8))
+      scan_string += "%d";
+    else if(variable_type->isIntegerTy())
+      scan_string += "%d";
+    arguments.push_back(variable_parameter);
+
+  }
+  //scan_string += "\n";
+  llvm::Value *scan_str = LLVMBuilder->CreateGlobalStringPtr(scan_string, "scan_str");
+  arguments.insert(arguments.begin(), scan_str);
+  LLVMBuilder->CreateCall(scanFunc, arguments);
+
+  // Convert back to int8
+  for(auto v = convert_from32int_to8int.begin(); v != convert_from32int_to8int.end(); v++){
+    llvm::Type *T =  llvm::Type::getInt8Ty(*LLVMContext);
+    llvm::Value *variable_to_cast = LLVMBuilder->CreateLoad(v->first, "scanargcastto_");
+    llvm::Value *variable_value = createCastLLVM(variable_to_cast, T);
+    LLVMBuilder->CreateStore(variable_value, v->second);
+  }
+
+  return nullptr;
 }
 
 
@@ -699,27 +1145,22 @@ llvm::Value* IfStatement::codegen() {
   std::cout<< "IF STATEMENT" << std::endl;
   
   llvm::Value *logic = this->l->codegen();
-  logic = llvm::ConstantInt::get(*LLVMContext, llvm::APInt(1, 0));
-
-  llvm::Value *CondV = LLVMBuilder->CreateFCmpONE(logic, llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(0.0)), "ifcond");
-  
   llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
-
   llvm::BasicBlock *ThenBB = llvm::BasicBlock::Create(*LLVMContext, "then", F);
-  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "end");
+  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "endif");
   llvm::BasicBlock *ElseBB, *ElifCondBB, *ElifBB, *NextBB;
 
   if(this->ei){
     ElifCondBB = llvm::BasicBlock::Create(*LLVMContext, "elifcond");
-    LLVMBuilder->CreateCondBr(CondV, ThenBB, ElifCondBB);
+    LLVMBuilder->CreateCondBr(logic, ThenBB, ElifCondBB);
     if(this->e) ElseBB = llvm::BasicBlock::Create(*LLVMContext, "else");
   }
   else if(this->e){
     ElseBB = llvm::BasicBlock::Create(*LLVMContext, "else");
-    LLVMBuilder->CreateCondBr(CondV, ThenBB, ElseBB);
+    LLVMBuilder->CreateCondBr(logic, ThenBB, ElseBB);
   }
   else
-    LLVMBuilder->CreateCondBr(CondV, ThenBB, EndBB);
+    LLVMBuilder->CreateCondBr(logic, ThenBB, EndBB);
 
   LLVMBuilder->SetInsertPoint(ThenBB);
   this->c->codegen();
@@ -734,8 +1175,6 @@ llvm::Value* IfStatement::codegen() {
       LLVMBuilder->SetInsertPoint(ElifCondBB);
 
       llvm::Value *eliflogic = elif->l->codegen();
-      eliflogic = llvm::ConstantInt::get(*LLVMContext, llvm::APInt(1, 0));
-      CondV = LLVMBuilder->CreateFCmpONE(eliflogic, llvm::ConstantFP::get(*LLVMContext, llvm::APFloat(0.0)), "ifcond2");
       
       ElifBB = llvm::BasicBlock::Create(*LLVMContext, "elif");
       if(i->hasNext()){
@@ -743,7 +1182,7 @@ llvm::Value* IfStatement::codegen() {
       }
       else if(this->e) ElifCondBB = ElseBB;
       else ElifCondBB = EndBB;
-      LLVMBuilder->CreateCondBr(CondV, ElifBB, ElifCondBB);
+      LLVMBuilder->CreateCondBr(eliflogic, ElifBB, ElifCondBB);
 
       F->getBasicBlockList().push_back(ElifBB);
       LLVMBuilder->SetInsertPoint(ElifBB);
@@ -762,34 +1201,97 @@ llvm::Value* IfStatement::codegen() {
   
   F->getBasicBlockList().push_back(EndBB);
   LLVMBuilder->SetInsertPoint(EndBB);
-  //llvm::PHINode *PN = LLVMBuilder->CreatePHI(llvm::Type::getDoubleTy(*LLVMContext), 2, "iftmp");
-
-  //PN->addIncoming(ThenV, ThenBB);
-  //PN->addIncoming(ElseV, ElseBB);
-  return nullptr; //PN;
+  return nullptr;
 }
 
 ForStatement::ForStatement(){
+  this->init = NULL;
+  this->control = NULL;
+  this->iter = NULL;
+  this->body = NULL;
   printf(">>>>>ForStatement\n");
 }
 
 llvm::Value* ForStatement::codegen() {
+  std::cout<< "FOR STATEMENT" << std::endl;
+  llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
+
+  llvm::BasicBlock *PreheaderBB = LLVMBuilder->GetInsertBlock();
+  llvm::BasicBlock *CondBB = llvm::BasicBlock::Create(*LLVMContext, "forcond", F);
+  llvm::BasicBlock *ForBB = llvm::BasicBlock::Create(*LLVMContext, "for");
+  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "endfor");
+  llvm::Value *init = this->init->codegen();
+  LLVMBuilder->CreateBr(CondBB);
+  LLVMBuilder->SetInsertPoint(CondBB);
+  llvm::Value *control = this->control->codegen();
+  LLVMBuilder->CreateCondBr(control, ForBB, EndBB);
+
+  F->getBasicBlockList().push_back(ForBB);
+  LLVMBuilder->SetInsertPoint(ForBB);
+  this->body->codegen();
+  llvm::Value *iter = this->iter->codegen();
+  LLVMBuilder->CreateBr(CondBB);
+
+  F->getBasicBlockList().push_back(EndBB);
+  LLVMBuilder->SetInsertPoint(EndBB);
   return nullptr;
 }
 
 WhileStatement::WhileStatement(){
+  this->control = NULL;
+  this->body = NULL;
   printf(">>>>>WhileStatement\n");
 }
 
 llvm::Value* WhileStatement::codegen() {
+  std::cout<< "WHILE STATEMENT" << std::endl;
+  llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
+
+  llvm::BasicBlock *PreheaderBB = LLVMBuilder->GetInsertBlock();
+  llvm::BasicBlock *CondBB = llvm::BasicBlock::Create(*LLVMContext, "whilecond", F);
+  llvm::BasicBlock *WhileBB = llvm::BasicBlock::Create(*LLVMContext, "while");
+  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "endwhile");
+  LLVMBuilder->CreateBr(CondBB);
+  LLVMBuilder->SetInsertPoint(CondBB);
+  llvm::Value *control = this->control->codegen();
+  LLVMBuilder->CreateCondBr(control, WhileBB, EndBB);
+
+  F->getBasicBlockList().push_back(WhileBB);
+  LLVMBuilder->SetInsertPoint(WhileBB);
+  this->body->codegen();
+  LLVMBuilder->CreateBr(CondBB);
+
+  F->getBasicBlockList().push_back(EndBB);
+  LLVMBuilder->SetInsertPoint(EndBB);
   return nullptr;
 }
 
 DoWhileStatement::DoWhileStatement(){
+  this->control = NULL;
+  this->body = NULL;
   printf(">>>>>DoWhileStatement\n");
 }
 
 llvm::Value* DoWhileStatement::codegen() {
+  std::cout<< "DO WHILE STATEMENT" << std::endl;
+  llvm::Function *F = LLVMBuilder->GetInsertBlock()->getParent();
+
+  llvm::BasicBlock *PreheaderBB = LLVMBuilder->GetInsertBlock();
+  llvm::BasicBlock *CondBB = llvm::BasicBlock::Create(*LLVMContext, "dowhilecond");
+  llvm::BasicBlock *DoWhileBB = llvm::BasicBlock::Create(*LLVMContext, "dowhile", F);
+  llvm::BasicBlock *EndBB = llvm::BasicBlock::Create(*LLVMContext, "enddowhile");
+  LLVMBuilder->CreateBr(DoWhileBB);
+  LLVMBuilder->SetInsertPoint(DoWhileBB);
+  this->body->codegen();
+  LLVMBuilder->CreateBr(CondBB);
+
+  F->getBasicBlockList().push_back(CondBB);
+  LLVMBuilder->SetInsertPoint(CondBB);
+  llvm::Value *control = this->control->codegen();
+  LLVMBuilder->CreateCondBr(control, DoWhileBB, EndBB);
+
+  F->getBasicBlockList().push_back(EndBB);
+  LLVMBuilder->SetInsertPoint(EndBB);
   return nullptr;
 }
 
@@ -813,6 +1315,8 @@ llvm::Value* Statement::codegen() {
 StatementComponent::StatementComponent(){
   fc = NULL;
   fr = NULL;
+  fp = NULL;
+  fs = NULL;
   vd = NULL;
   s = NULL;
   a = NULL;
@@ -822,6 +1326,8 @@ llvm::Value* StatementComponent::codegen() {
   std::cout<< "STATEMENT COMPONENT" << std::endl;
   if(fc) fc->codegen();
   else if(fr) fr->codegen();
+  else if(fp) fp->codegen();
+  else if(fs) fs->codegen();
   else if(vd) vd->codegen();
   else if(s) s->codegen();
   else if(a) a->codegen();

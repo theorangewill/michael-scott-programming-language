@@ -4,6 +4,10 @@
     #define __iostream
     #include <iostream>
 #endif
+#ifndef __fstream
+    #define __fstream
+    #include <fstream>
+#endif
 
 #include "ast.h"
 #include "llvm.h"
@@ -16,6 +20,7 @@ extern std::map<std::string, std::map<std::string, llvm::AllocaInst*>> LLVMVaria
 extern std::map<std::string, std::unique_ptr<llvm::Function>> LLVMFunctions;
 
 llvm::Function *getFunction(std::string name);
+bool check_extension(std::string filename);
 
 class MichaelScottNode: public Node{
 public:
@@ -31,6 +36,7 @@ class MichaelScottExpressionNode: public ExpressionNode{
 public:
   bool negative;
   virtual llvm::Value *codegen() = 0;
+  virtual llvm::Type *getTypeOfExpression() = 0;
   MichaelScottExpressionNode();
 };
 
@@ -39,18 +45,17 @@ public:
   virtual llvm::Value *codegen() = 0;
 };
 
-
-
 class Variable: public MichaelScottNode, public MichaelScottExpressionNode{
 public:
   std::string type;
   std::string name;
+  bool array;
   Variable();
   Variable(std::string type);
   Variable(std::string type, std::string name);
   std::string print();
   llvm::Value *codegen();
-  llvm::AllocaInst* getAllocated();  
+  llvm::Type *getTypeOfExpression();
 };
 
 class Variables: public MichaelScottNode, public List<Variable>{
@@ -67,6 +72,16 @@ public:
   llvm::Value *codegen();
 };
 
+class ArrayDeclaration: public MichaelScottNode{
+public:
+  std::string type;
+  int size;
+  Variables *v;
+  ArrayDeclaration();
+  llvm::Value *codegen();
+};
+
+
 class Number: public MichaelScottExpressionNode {
 public:
   double val;
@@ -74,6 +89,7 @@ public:
   Number(double val);
   std::string print();
   llvm::Value *codegen();
+  llvm::Type *getTypeOfExpression();
 };
 
 class Expression: public MichaelScottExpressionNode {
@@ -85,6 +101,7 @@ public:
   Expression(MichaelScottExpressionNode* LHS, std::string op, MichaelScottExpressionNode* RHS);
   std::string print();
   llvm::Value *codegen();
+  llvm::Type *getTypeOfExpression();
 };
 
 class LogicExpression: public MichaelScottLogicExpressionNode {
@@ -125,6 +142,8 @@ public:
 class Argument: public MichaelScottNode{
 public:
   std::string name;
+  Number *num;
+  std::string str;
   Argument();
   llvm::Value *codegen();
 };
@@ -143,6 +162,20 @@ public:
   llvm::Value *codegen();
 };
 
+class ScanFunctionCall: public MichaelScottNode{
+public:
+  Arguments *args;
+  ScanFunctionCall();
+  llvm::Value *codegen();
+};
+
+class PrintFunctionCall: public MichaelScottNode{
+  public:
+  Arguments *args;
+  PrintFunctionCall();
+  llvm::Value *codegen();
+};
+
 class Assignment: public MichaelScottNode{
 public:
   Variable *v;
@@ -151,13 +184,11 @@ public:
   Assignment();
   llvm::Value *codegen();
 };
-
 class Assignments: public MichaelScottNode, public List<Assignment>{
 public:
   Assignments();
   llvm::Value *codegen();
 };
-
 class Parameter: public MichaelScottNode{
 public:
   std::string type;
@@ -214,26 +245,26 @@ public:
 
 class ForStatement: public MichaelScottNode{
 public:
-  Assignments *variables;
-  Logic *l;
-  Assignments *o;
-  StatementComponents *c;
+  Assignments *init;
+  Logic *control;
+  Assignments *iter;
+  StatementComponents *body;
   ForStatement();
   llvm::Value *codegen();
 };
 
 class WhileStatement: public MichaelScottNode{
 public:
-  Logic *l;
-  StatementComponents *c;
+  Logic *control;
+  StatementComponents *body;
   WhileStatement();
   llvm::Value *codegen();
 };
 
 class DoWhileStatement: public MichaelScottNode{
 public:
-  Logic *l;
-  StatementComponents *c;
+  Logic *control;
+  StatementComponents *body;
   DoWhileStatement();
   llvm::Value *codegen();
 };
@@ -251,8 +282,11 @@ public:
 class StatementComponent: public MichaelScottNode{
 public:
   FunctionCall *fc;
+  PrintFunctionCall *fp;
+  ScanFunctionCall *fs;
   FunctionReturn *fr;
   VariableDeclaration *vd;
+  ArrayDeclaration *ad;
   Statement *s;
   Assignment *a;
   StatementComponent();
@@ -268,8 +302,11 @@ public:
 class FunctionComponent: public MichaelScottNode{
 public:
   FunctionCall *fc;
+  PrintFunctionCall *fp;
+  ScanFunctionCall *fs;
   FunctionReturn *fr;
   VariableDeclaration *vd;
+  ArrayDeclaration *ad;
   Statement *s;
   Assignment *a;
   FunctionComponent();
@@ -292,10 +329,20 @@ public:
   llvm::Value *codegen();
 };
 
+
 class GlobalVariableDeclaration: public MichaelScottNode{
 public:
   VariableDeclaration* vd;
   GlobalVariableDeclaration();
+  llvm::Value *codegen();
+};
+
+class MainFunction: public MichaelScottNode{
+public:
+  static bool created;
+  Parameters *p;
+  FunctionComponents *body;
+  MainFunction();
   llvm::Value *codegen();
 };
 
@@ -304,6 +351,7 @@ public:
   Include *i;
   GlobalVariableDeclaration *gvd;
   Function *f;
+  MainFunction *main;
   Component();
   llvm::Value *codegen();
 };

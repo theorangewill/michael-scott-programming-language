@@ -1,0 +1,104 @@
+This is the first version fo the language syntax, may be out of date.
+
+MichaelScott: ComponentsOpt EOF
+ComponentsOpt: Components | ''
+Components: Component LV_
+LV_: Component LV_ | MainDeclaration | ''
+Component: Includes | GlobalVariableDeclaration | Function
+
+Includes: 'SABRE ACQUIRED ' '"' Library '"' ' and Dunder Mifflin' '\n'
+Library: STRING
+
+Type: 'KELLY' | 'GABE' | 'CREED'
+
+GlobalVariableDeclaration: 'CORPORATE' VariableDeclaration
+
+ListParameterOpt: ListParameters | ''
+ListParameters: Parameter LV_
+LV_: ',' Parameter LV_ | ''
+Parameter: Type VariableName
+
+VariableDeclaration: Type ListVariableDeclaration '\n'
+ListVariableDeclaration: VariableName LVD_
+LVD_: ',' ListVariableDeclaration | ''
+VariableName: 'paper' INTEIRO 
+
+ListVariableOptCall: ListVariableCall | ''
+ListVariableCall: VariableName LVC_
+LVC_: ',' VariableName LVC_ | ''
+
+
+LogicOpt: Logic | ''
+Logic: LogicParenthesisOPT
+LogicParenthesisOPT: '(' Logic ')' | LogicExpression LE_
+LE_: LogicOperation Logic | ''
+
+LogicExpression: NotOperation Operand LogicCompare
+LogicCompare: CompareOperation Operand | ''
+LogicOperation: 'AND' | 'OR'
+NotOperation: 'NOT' | ''
+CompareOperation: '>' | '>=' | '<' | '<=' | '==' | '=!'
+CompareOperand: Operand | LogicOperand
+LogicOperand: 'ASSISTANT TO THE REGIONAL MANAGER' | 'WORLDS BEST BOSS'
+
+
+MathOperationAssignment: Assignment MathOperation 'SOLD'
+Assignment: VariableName '='
+MathOperation: FunctionCall | Expression
+
+ExpressionOPT: Expression | ''
+Expression: ParenthesisOPT
+ParenthesisOPT: '(' Expression ')' | Operand E_
+E_: MathPrimaryOperation Expression | ''
+Operand: VariableName | NUMERO | Expression
+MathPrimaryOperation: '+' | '-' | '*' | '/' | '%'
+
+Function: 'DUNDER MIFFLIN THIS IS ' 'chilli'INTEIRO '(' ListParameterOpt ')' FunctionBody FunctionEnd
+FunctionEnd: 'FIRE' '!'
+FunctionBodyOpt: FunctionBody | ''
+FunctionBody: FunctionComponent LE_
+LE_: FunctionComponent LE_ | ''
+'THATS WHAT SHE SAID' chilli INTEIRO '(' ListVariableCallOpt ')' '\n'
+FunctionComponent: VariableDeclaration | FunctionCall | Statement | FunctionReturn | MathOperationAssignment
+FunctionCall: 
+FunctionReturn: 'DUNDIE GOES TO' VariableName | ''
+Statement: IfStatement | ForStatement | WhileStatement | DoWhileStatement
+
+ForStatement: 'FOR EACH ANGELAS CAT' ForControl ':' '\n' ForBody ForStatementEnd
+ForStatementEnd: 'DWIGHT HAVE KILLED THEM'
+ForControl: ForVariables ':' ForEquation '::' ForVariables
+ForVariables: ForVariableAssignment | ''
+ForVariableAssignment: Assignment MathOperation FVA_
+FVA_: ',' ForOperationAssignment LVA_ | ''
+ForOperationAssignment: Assignment MathOperation
+ForEquation: LogicEquationOpt 
+ForOperation: ForVariables
+ForBody: FunctionBody
+
+WhileStatement: 'WHILE STANLEY IS SLEEPING and'  WhileControl ':' WhileBody WhileStatementEnd
+WhileStatementEnd: 'THE WORKING DAY IS OVER'
+WhileControl: LogicEquation
+WhileBody: FunctionBody
+
+DoWhileStatement: 'RYAN DOES' ':' '\n' DoWhileBody DoWhileStatementEnd
+DoWhileStatementEnd: 'WHILE KELLY IS TALKING and ' WhileControl ':' '\n'
+DoWhileBody: FunctionBody
+
+IfStatement: 'IF TOBY IS NOT HERE and' IfControle ':' IfBody IfStatementEnd
+IfControle: LogicEquation
+IfStatementEnd: ElseIfStatementOpt 'TOBY ARRIVED'
+ElseIfStatementOpt: ElseIfStatement | ElseStatement | ''
+ElseIfStatement: 'TOBY IS HERE OH WAIT IT WASNT HIM SO IF ' IfControle ':' IfBody ElseIfStatementOpt
+ElseStatement: 'TOBY IS COMING' ':' '\n' IfBody
+IfBody: FunctionBody
+
+MainDeclaration: 'Scranton' '(' VariableOpt ')' '\n' FunctionBody MainDeclarationEnd
+MainDeclarationEnd: 'FIRE' '!'
+
+
+
+
+
+
+
+

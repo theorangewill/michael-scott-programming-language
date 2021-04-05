@@ -11,9 +11,9 @@ Parser::Parser(){
   MathopPrecedence["*"] = 40; 
   MathopPrecedence["/"] = 40; 
   MathopPrecedence["%"] = 60; 
-  LogicopPrecedence["OR"] = 20;
-  LogicopPrecedence["AND"] = 40;
-  LogicopPrecedence["NOT"] = 60;
+  LogicopPrecedence["snip"] = 20; // or
+  LogicopPrecedence["snap"] = 40; // and
+  LogicopPrecedence["no god no"] = 60; // not
   TypesDefinition["DARRYL"] = "128int"; // long long int
   TypesDefinition["PAM"] = "64int"; // long int
   TypesDefinition["JIM"] = "32int"; // int
@@ -38,8 +38,6 @@ Parser::Parser(){
   TypesDefinition["ANGELA"] = "u32int"; // unsigned int
   TypesDefinition["TOBY"] = "u16int"; // unsigned short int
   TypesDefinition["MEREDITH"] = "u8int"; // unsigned short short int
-
-
 };
 
 void Parser::error()
@@ -245,9 +243,9 @@ Token Parser::nextToken(){
       return Token(Token::tok_statement_support, IdentifierStr);
     }
     // If it is end of Do While statement
-    if((support_aux = parserSupport("WHILE KELLY IS TALKING and"))){
+    if((support_aux = parserSupport("WHEN KELLY IS TALKING and"))){
       if(support_aux < 0)
-        error("Wrong Do While statement end support. It should be 'WHILE KELLY IS TALKING and'. If you meant an While statement support, it should be 'WHILE STANLEY IS SLEEPING and'");
+        error("Wrong Do While statement end support. It should be 'WHEN KELLY IS TALKING and'. If you meant an While statement support, it should be 'WHILE STANLEY IS SLEEPING and'");
       *buffer--;
       return Token(Token::tok_statement_support, IdentifierStr);
     }
@@ -256,6 +254,18 @@ Token Parser::nextToken(){
       if(support_aux < 0)
         error("Wrong support for function call. It should be 'THATS WHAT SHE SAID'");
       return Token(Token::tok_function_support, IdentifierStr);
+    }
+    // If it is print call
+    if((support_aux = parserSupport("GET ME A COPY OF"))){
+      if(support_aux < 0)
+        error("Wrong support for print call. It should be 'GET ME A COPY OF'");
+      return Token(Token::tok_print_function_support, IdentifierStr);
+    }
+    // If it is scan call
+    if((support_aux = parserSupport("CLIENT IS ASKING FOR"))){
+      if(support_aux < 0)
+        error("Wrong support for scan call. It should be 'CLIENT IS ASKING FOR'");
+      return Token(Token::tok_scan_function_support, IdentifierStr);
     }
     // If it is False
     if((support_aux = parserSupport("ASSISTANT TO THE REGIONAL MANAGER"))){
@@ -287,29 +297,41 @@ Token Parser::nextToken(){
       return Token(Token::tok_support, IdentifierStr);
     }
     // If it is AND
-    if((support_aux = parserSupport("AND"))){
+    if((support_aux = parserSupport("snap"))){
       *buffer--;
       return Token(Token::tok_logicop, IdentifierStr);
     }
     // If it is OR
-    if((support_aux = parserSupport("OR"))){
+    if((support_aux = parserSupport("snip"))){
       *buffer--;
       return Token(Token::tok_logicop, IdentifierStr);
     }
     // If it is NOT
-    if((support_aux = parserSupport("NOT"))){
+    if((support_aux = parserSupport("no god no"))){
       *buffer--;
       return Token(Token::tok_notop, IdentifierStr);
     }
     // If it is a global variable
     if((support_aux = parserSupport("CORPORATE"))){
-      return Token(Token::tok_type, IdentifierStr);
+      return Token(Token::tok_global_support, IdentifierStr);
+    }
+    // If it is array declaration
+    if((support_aux = parserSupport("GABE"))){
+      return Token(Token::tok_array_declaration, IdentifierStr);
+    }
+    // If it is support for array_declaration
+    if((support_aux = parserSupport("small talks to"))){
+      if(support_aux < 0)
+        error("Wrong array declaration statement. It should be 'small talks to'.");
+      *buffer--;
+      return Token(Token::tok_array_declaration_support, IdentifierStr);
+    }
+    // If it is support for array_declaration
+    if((support_aux = parserSupport("times"))){
+      return Token(Token::tok_array_declaration_support, IdentifierStr);
     }
     // If it is variable type
     if((support_aux = parserSupport("KELLY"))){
-      return Token(Token::tok_type, IdentifierStr);
-    }
-    if((support_aux = parserSupport("GABE"))){
       return Token(Token::tok_type, IdentifierStr);
     }
     if((support_aux = parserSupport("JIM"))){
@@ -377,20 +399,6 @@ Token Parser::nextToken(){
     }
     error("Wrong support text, type name, variable name or function name.");
   }
-/*
-  if (isdigit(*buffer) || *buffer == '.') { // Number: [0-9.]+
-    std::string NumStr;
-    do {
-      NumStr += *buffer;
-      *buffer++;
-    } while (isdigit(*buffer) || *buffer == '.');
-
-    NumVal = strtod(NumStr.c_str(), nullptr);
-    thisToken.type = -1000;
-    thisToken.lexeme = NumStr;
-    return thisToken;
-  }
-*/
   char* begin_digit = buffer;
   // If it is a digit (it can begins with . - [0-9])
   ///if (*buffer == '.' || *buffer == '' || isdigit(*buffer))
@@ -413,7 +421,7 @@ Token Parser::nextToken(){
       if(isdigit(*buffer))
         buffer++;
       else
-	      error("Wrong number.", std::string(begin_digit, buffer));
+        error("Wrong number.", std::string(begin_digit, buffer));
       while (isdigit(*buffer))
         buffer++;
     }
@@ -425,7 +433,7 @@ Token Parser::nextToken(){
       if(isdigit(*buffer))
         buffer++;
       else
-	      error("Wrong number.", std::string(begin_digit, buffer));
+        error("Wrong number.", std::string(begin_digit, buffer));
       while (isdigit(*buffer))
         buffer++;
     }
@@ -443,10 +451,10 @@ Token Parser::nextToken(){
       else if(*buffer == 92){
         buffer++;
         if(*buffer == 34 || *buffer == 10 || *buffer == 9 || *buffer == 92){
-         buffer++;
+          buffer++;
         }
         else
-         error();
+          error();
       }
       else
         buffer++;
@@ -511,11 +519,12 @@ Component* Parser::component()
   
   if(lookahead.type == Token::tok_include_support)
     c->i = include();
-  else if(lookahead.type == Token::tok_support)
+  else if(lookahead.type == Token::tok_global_support)
     c->gvd = globalvariabledeclaration();
-  else if(lookahead.type ==  Token::tok_function_support
-          || lookahead.type ==  Token::tok_main)
+  else if(lookahead.type ==  Token::tok_function_support)
     c->f = function();
+  else if(lookahead.type ==  Token::tok_main)
+    c->main = mainfunction();
   else
     error("You should declare a global variable, include a library or describe a function");
   printf("<<<<<Component");
@@ -546,25 +555,42 @@ GlobalVariableDeclaration* Parser::globalvariabledeclaration()
   return gvd;
 }
 
-Function* Parser::function()
+MainFunction* Parser::mainfunction()
 {
-	Function* f = new Function();
-  if(lookahead.lexeme == "DUNDER MIFFLIN THIS IS"){
-    advance();
-    match(Token::tok_type);
-    if (TypesDefinition.find(lookahead.lexeme) != TypesDefinition.end()) {
-      f->return_type = TypesDefinition[lookahead.lexeme];
-    } else {
-      error("Type not defined", lookahead.lexeme);
-    }
-    advance();
-    match(Token::tok_function);
-  }
-  else if(lookahead.lexeme == "Scranton"){
+	MainFunction* f = new MainFunction();
+  if(lookahead.lexeme == "Scranton"){
     match(Token::tok_main);
   }
   else
     error("Wrong function definition");
+  advance();
+  match("(");
+  f->p = parameters();
+  match(")");
+  f->body = functioncomponents();
+  match("FIRE");
+  advance();
+  match("!");
+  advance();
+  printf("<<<<<Function");
+  return f;
+}
+
+
+Function* Parser::function()
+{
+	Function* f = new Function();
+  if(lookahead.lexeme == "DUNDER MIFFLIN THIS IS")
+    advance();
+  else
+    error("Wrong function definition");
+  match(Token::tok_type);
+  if (TypesDefinition.find(lookahead.lexeme) != TypesDefinition.end())
+    f->return_type = TypesDefinition[lookahead.lexeme];
+  else
+    error("Type not defined", lookahead.lexeme);
+  advance();
+  match(Token::tok_function);
   f->name = lookahead.lexeme;
   advance();
   match("(");
@@ -630,11 +656,22 @@ FunctionComponent* Parser::functioncomponent()
     case Token::tok_type:
       c->vd = variabledeclaration();
       break;
+    case Token::tok_array_declaration:
+      c->ad = arraydeclaration();
+      break;
     case Token::tok_function_support:
       if(lookahead.lexeme == "THATS WHAT SHE SAID")
         c->fc = functioncall();
       else if(lookahead.lexeme == "DUNDIE GOES TO")
         c->fr = functionreturn();
+      break;
+    case Token::tok_print_function_support:
+      if(lookahead.lexeme == "GET ME A COPY OF")
+        c->fp = printfunctioncall();
+      break;
+    case Token::tok_scan_function_support:
+      if(lookahead.lexeme == "CLIENT IS ASKING FOR")
+        c->fs = scanfunctioncall();
       break;
     case Token::tok_statement_support:
       c->s = statement();
@@ -652,10 +689,14 @@ FunctionComponent* Parser::functioncomponent()
 FunctionCall* Parser::functioncall()
 {
   FunctionCall* fc = new FunctionCall();
-  match("THATS WHAT SHE SAID");
-  advance();
-  match(Token::tok_function);
-  fc->name = lookahead.lexeme;
+  if(lookahead.lexeme == "THATS WHAT SHE SAID"){
+    advance();
+    match(Token::tok_function);
+    fc->name = lookahead.lexeme;
+  }
+  else{
+    error("This is not a function call.");
+  }
   advance();
   match("(");
   fc->args = arguments();
@@ -683,10 +724,50 @@ Arguments* Parser::arguments()
 Argument* Parser::argument()
 {
   Argument* a = new Argument();
-  match(Token::tok_variable);
-  a->name = lookahead.lexeme;
+  if(lookahead.type == Token::tok_variable)
+    a->name = lookahead.lexeme;
+  else if(lookahead.type == Token::tok_number)
+    a->num = number();
+  else if(lookahead.type == Token::tok_string){
+    std::string str = (lookahead.lexeme);
+    str.erase(0, 1);
+    str.erase(str.size() - 1);
+    a->str = str;
+  }
+  else
+    error("Function call argument receives only variables and numbers");
   printf("<<<<<Argument");
   return a;
+}
+
+ScanFunctionCall* Parser::scanfunctioncall()
+{
+  ScanFunctionCall* fs = new ScanFunctionCall();
+  if(lookahead.lexeme == "CLIENT IS ASKING FOR")
+    advance();
+  else
+    error("This is not a scan function call.");
+  match("(");
+  fs->args = arguments();
+  match(")");
+  advance();
+  printf("<<<<<ScanFunctionCall");
+  return fs;
+}
+
+PrintFunctionCall* Parser::printfunctioncall()
+{
+  PrintFunctionCall* fp = new PrintFunctionCall();
+  if(lookahead.lexeme == "GET ME A COPY OF")
+    advance();
+  else
+    error("This is not a print function call.");
+  match("(");
+  fp->args = arguments();
+  match(")");
+  advance();
+  printf("<<<<<PrintFunctionCall");
+  return fp;
 }
 
 FunctionReturn* Parser::functionreturn()
@@ -703,6 +784,32 @@ FunctionReturn* Parser::functionreturn()
   advance();
   printf("<<<<<FunctionReturn");
   return fr;
+}
+
+ArrayDeclaration* Parser::arraydeclaration()
+{
+  ArrayDeclaration* ad = new ArrayDeclaration();
+  std::string array_type;
+  match(Token::tok_array_declaration);
+  advance();
+  match(Token::tok_array_declaration_support);
+  advance();
+  if (TypesDefinition.find(lookahead.lexeme) != TypesDefinition.end()) {
+    array_type = lookahead.lexeme;
+    ad->type = TypesDefinition[lookahead.lexeme];
+  } else {
+    error("Type not defined", lookahead.lexeme);
+  }
+  advance();
+  if(lookahead.type == Token::tok_number)
+    ad->size = std::stoi(lookahead.lexeme);
+  else
+    error("Array declaration should receive a size");
+  advance();
+  match(Token::tok_array_declaration_support);
+  ad->v = variables(array_type);
+  printf("<<<<<VariableDeclaration");
+  return ad;
 }
 
 VariableDeclaration* Parser::variabledeclaration()
@@ -722,6 +829,7 @@ VariableDeclaration* Parser::variabledeclaration()
 Variables* Parser::variables(std::string variable_type)
 {
 	Variables* v = new Variables();
+  std:: cout << variable_type << std::endl;
 	while(true) {
     advance();
 		v->add(variable(variable_type));
@@ -810,11 +918,11 @@ StatementComponents* Parser::dowhilestatementcomponents()
 {
 	StatementComponents* c = new StatementComponents();
   advance();
-  if (lookahead.lexeme == "WHILE KELLY IS TALKING and")
+  if (lookahead.lexeme == "WHEN KELLY IS TALKING and")
     return c;
 	while(true) {
 		c->add(statementcomponent());
-		if (lookahead.lexeme == "WHILE KELLY IS TALKING and"){    
+		if (lookahead.lexeme == "WHEN KELLY IS TALKING and"){    
       printf("<<<<<StatementComponents");
       return c;
     }
@@ -828,6 +936,9 @@ StatementComponent* Parser::statementcomponent()
     case Token::tok_type:
       c->vd = variabledeclaration();
       break;
+    case Token::tok_array_declaration:
+      c->ad = arraydeclaration();
+      break;
     case Token::tok_function_support:
       if(lookahead.lexeme == "THATS WHAT SHE SAID")
         c->fc = functioncall();
@@ -835,6 +946,14 @@ StatementComponent* Parser::statementcomponent()
         c->fr = functionreturn();
       else
         error("You should create a body for this statement. If you tried to call a function or make a return, the syntax is wrong");
+      break;
+    case Token::tok_print_function_support:
+      if(lookahead.lexeme == "GET ME A COPY OF")
+        c->fp = printfunctioncall();
+      break;
+    case Token::tok_scan_function_support:
+      if(lookahead.lexeme == "CLIENT IS ASKING FOR")
+        c->fs = scanfunctioncall();
       break;
     case Token::tok_statement_support:
       c->s = statement();
@@ -925,14 +1044,14 @@ ForStatement* Parser::forstatement()
 {
   ForStatement* f = new ForStatement();
   match("FOR EACH ANGELAS CAT");
-  f->variables = assignments();
+  f->init = assignments();
   match(":");
   advance();
-  f->l = logic();
+  f->control = logic();
   match(":");
-  f->o = assignments();
+  f->iter = assignments();
   match(":");
-  f->c = forstatementcomponents();
+  f->body = forstatementcomponents();
   match("OH NO DWIGHT HAVE KILLED THEM");
   printf("<<<<<ForStatement");
   return f;
@@ -943,9 +1062,9 @@ WhileStatement* Parser::whilestatement()
   WhileStatement* w = new WhileStatement();
   match("WHILE STANLEY IS SLEEPING and");
   advance();
-  w->l = logic();
+  w->control = logic();
   match(":");
-  w->c = whilestatementcomponents();
+  w->body = whilestatementcomponents();
   match("THE WORKING DAY IS OVER");
   printf("<<<<<WhileStatement");
   return w;
@@ -957,10 +1076,10 @@ DoWhileStatement* Parser::dowhilestatement()
   match("AND RYAN DOES");
   advance();
   match(":");
-  d->c = dowhilestatementcomponents();
-  match("WHILE KELLY IS TALKING and");
+  d->body = dowhilestatementcomponents();
+  match("WHEN KELLY IS TALKING and");
   advance();
-  d->l = logic();
+  d->control = logic();
   match(":");
   printf("<<<<<DoWhileStatement");
   return d;
@@ -1057,10 +1176,10 @@ LogicExpression* Parser::logicexpression()
   else
     error("A comparison operation is expected");
   advance();
-  if(lookahead.type == Token::tok_notop){
-    le->notRHS = true;
-    advance();
-  }
+  //if(lookahead.type == Token::tok_notop){
+  //  le->notRHS = true;
+  //  advance();
+  //}
   if(lookahead.type == Token::tok_variable
     || lookahead.type == Token::tok_number)
     le->RHS = expression();
@@ -1073,7 +1192,7 @@ Logic* Parser::logicPrecedence(int precedence, Logic* LHS) {
   static int i =0;
   i++;
   int previous_precedence = -1;
-  while (true) {
+  while(true){
     if(lookahead.type != Token::tok_logicop) return LHS;
     int current_precedence = logicopPrecedence();
     if(current_precedence < precedence) return LHS;
@@ -1142,6 +1261,7 @@ Assignment* Parser::assignment()
   advance();
   match("=");
   advance();
+  std::cout << lookahead.lexeme << std::endl;
   if(lookahead.lexeme == "THATS WHAT SHE SAID"){
     a->f = functioncall();
   }
@@ -1152,6 +1272,8 @@ Assignment* Parser::assignment()
     a->e = (Expression*) expression();
     printf("======== %s\n", a->e->print().c_str());
   }
+  else if(lookahead.type == Token::tok_function)
+    error("Missing 'THATS WHAT SHE SAID' to call function");
   else
     error("You should assign something to the variable");
   match("SOLD");

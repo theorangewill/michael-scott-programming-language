@@ -3,12 +3,12 @@ CXXFLAGS = $(shell llvm-config --cxxflags)
 LDFLAGS = $(shell llvm-config --ldflags --system-libs --libs core)
 
 program: llvm.s michaelscottgrammar.s parser.s main.s 
-	$(compile) -o program $(LDFLAGS) main.s parser.s michaelscottgrammar.s llvm.s 
+	$(compile) -o MScompiler $(LDFLAGS) main.s parser.s michaelscottgrammar.s llvm.s 
 
 main.s: main.cpp main.h parser.h
 	$(compile) -O3 -S $< $(CXXFLAGS) -o main.s
 	
-parser.s: parser.cpp lexic.h michaelscottgrammar.h
+parser.s: parser.cpp parser.h lexic.h michaelscottgrammar.h
 	$(compile) -O3 -S $< $(CXXFLAGS) -o parser.s
 
 michaelscottgrammar.s: michaelscottgrammar.cpp michaelscottgrammar.h ast.h llvm.h

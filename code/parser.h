@@ -43,6 +43,7 @@ private:
     if (lookahead.type != t)
       error();
   }
+  
   void match(std::string l)
   {
     if (lookahead.lexeme != l)
@@ -65,7 +66,7 @@ private:
     if(lookahead.type != Token::tok_logicop)
       error("A logic operation is expected");
     int prec = LogicopPrecedence[lookahead.lexeme];
-    if (prec <= 0) return -1;
+    if(prec <= 0) return -1;
     return prec;
   }
 
@@ -74,6 +75,7 @@ private:
   Component* component();
   Include* include();
   GlobalVariableDeclaration* globalvariabledeclaration();
+  MainFunction* mainfunction();
   Function* function();
   Parameters* parameters();
   Parameter* parameter();
@@ -82,7 +84,10 @@ private:
   Arguments* arguments();
   Argument* argument();
   FunctionCall* functioncall();
+  PrintFunctionCall* printfunctioncall();
+  ScanFunctionCall* scanfunctioncall();
   FunctionReturn* functionreturn();
+  ArrayDeclaration* arraydeclaration();
   VariableDeclaration* variabledeclaration();
   Variables* variables(std::string variable_type);
   Variable* variable(std::string variable_type);
